@@ -45,6 +45,13 @@ Roblox chat text boxes open on keystroke (`/`) and commit on Enter.
   - Otherwise, the message is dispatched to the speech synthesis worker thread via `nac::Say()`.
   - **Chat Interception (`intercept_chat`)**: When enabled, the `SDLK_RETURN` key event is dynamically transformed into `SDLK_ESCAPE` before reaching Roblox. This causes Roblox to close the chat box and discard the draft without sending it into the game chat, while Vox TTS speaks the message through TTS in voice chat.
 
+#### VR keyboard (`src/vr_keyboard.cc`)
+In VR, Nightcap's in-headset keyboard types into Roblox through Nightcap's own input queue (`QueueVirtualTextInput` / `QueueVirtualKeyPress`), so its keys never pass through the SDL event functions above. Roblox still focuses and unfocuses text boxes through `SDL_StartTextInput*` / `SDL_StopTextInput`, so the tracker still knows when a box is open.
+- On the main thread, Vox TTS finds the keyboard's host callbacks (`mocktail::vr::g_host` and its mutex) through the static symbol table of `/proc/self/exe`, then swaps its own wrappers in for `commit_text` and `press_key`.
+- The wrappers feed the same `ChatTracker`, which a mutex now guards because they run on Nightcap's VR render thread, and then forward to Nightcap.
+- With Intercept Chat on, Enter is kept from Roblox. The box is cleared and closed with Ctrl+A, Backspace and Escape, sent through the keyboard's own path.
+- If Nightcap's binary is stripped, the symbols aren't found. The session log then says so, and VR chat isn't spoken.
+
 ### B. Microphone Audio Injection (`src/speech.cc`)
 - Nightcap opens the microphone capture stream via `SDL_OpenAudioDeviceStream()`.
 - Whenever Nightcap reads recorded audio samples from the microphone, `MixIntoMic()` is called on the buffer before it is passed to Roblox.

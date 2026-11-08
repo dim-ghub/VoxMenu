@@ -2,7 +2,8 @@
 // definitions come before libSDL3's. Each one calls the real SDL function and
 // adds a little on top:
 //
-//   * Text input: track the focused Roblox text box to know what you sent.
+//   * Text input: track the focused Roblox text box to know what you sent,
+//     from the physical keyboard here and the VR keyboard (vr_keyboard.cc).
 //   * Events: open/close the menu (F8 or the top-bar button) and, while it
 //     is open, give mouse and keyboard to the menu instead of the game.
 //   * Mouse mode: while the menu is open, keep the cursor free and visible
@@ -12,6 +13,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <mutex>
@@ -22,6 +25,7 @@
 #include "control.h"
 #include "overlay.h"
 #include "speech.h"
+#include "vr_keyboard.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -31,17 +35,26 @@ namespace {
 // ---------------------------------------------------------------------------
 // Chat
 
-ChatTracker g_chat;              // main thread only
+// Fed from the main thread and, for the VR keyboard, Nightcap's render thread.
+std::mutex g_chat_mutex;
+ChatTracker g_chat;
 bool g_roblox_text_active = false;
 SDL_WindowID g_window_id = 0;
 
-void OnSent(const std::string& message) {
+// Speaks a message that was just sent. Returns true when Intercept Chat
+// wants it kept out of the game chat.
+bool SpeakSent(const std::string& message) {
   const Config cfg = GetConfig();
-  if (!cfg.enabled) return;
-  if (cfg.skip_commands && !message.empty() && message[0] == '/') return;
+  if (!cfg.enabled) return false;
+  if (cfg.skip_commands && !message.empty() && message[0] == '/') return false;
   Log("speaking a chat message (%zu bytes)", message.size());
   Say(message);
+  return cfg.intercept_chat;
 }
+
+// How many Backspaces clear a box that held `chars` characters, in case
+// Ctrl+A is not handled.
+size_t ClearPresses(size_t chars) { return std::min<size_t>(chars + 2, 100); }
 
 // Injected synthetic events (for intercepting chat while clearing the text box).
 std::mutex g_injected_mutex;
@@ -93,7 +106,7 @@ void QueueClearAndCloseChat(SDL_WindowID win, size_t char_count) {
   InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
 
   // 3. Extra backspaces to ensure all characters are erased even if Ctrl+A is unhandled
-  const size_t extra = std::min<size_t>(char_count + 2, 100);
+  const size_t extra = ClearPresses(char_count);
   for (size_t i = 0; i < extra; ++i) {
     InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
   }
@@ -103,6 +116,7 @@ void QueueClearAndCloseChat(SDL_WindowID win, size_t char_count) {
 }
 
 bool ObserveChat(SDL_Event& e) {
+  std::unique_lock<std::mutex> lock(g_chat_mutex);
   if (!g_chat.active()) return false;
   if (e.type == SDL_EVENT_TEXT_INPUT && e.text.text != nullptr) {
     g_chat.Text(e.text.text);
@@ -110,12 +124,13 @@ bool ObserveChat(SDL_Event& e) {
   }
   if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return false;
 
-  const Config cfg = GetConfig();
-
   if (e.type == SDL_EVENT_KEY_DOWN) {
     const bool ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
     std::optional<std::string> sent;
     switch (e.key.key) {
+      case SDLK_A:
+        if (ctrl) g_chat.Key(ChatKey::kSelectAll, ctrl);
+        break;
       case SDLK_RETURN:
       case SDLK_KP_ENTER: sent = g_chat.Key(ChatKey::kReturn, ctrl); break;
       case SDLK_ESCAPE: g_chat.Key(ChatKey::kEscape, ctrl); break;
@@ -128,11 +143,10 @@ bool ObserveChat(SDL_Event& e) {
       default: break;
     }
     if (sent) {
-      const bool is_command = cfg.skip_commands && !sent->empty() && (*sent)[0] == '/';
-      OnSent(*sent);
-      if (cfg.enabled && cfg.intercept_chat && !is_command) {
+      const size_t count = g_chat.last_length() > 0 ? g_chat.last_length() : sent->size();
+      lock.unlock();
+      if (SpeakSent(*sent)) {
         g_swallow_return_up = true;
-        const size_t count = g_chat.last_length() > 0 ? g_chat.last_length() : sent->size();
         QueueClearAndCloseChat(e.key.windowID ? e.key.windowID : g_window_id, count);
         return true;  // Swallow Return key down
       }
@@ -144,6 +158,45 @@ bool ObserveChat(SDL_Event& e) {
     }
   }
   return false;
+}
+
+// The VR keyboard sends SDL scancodes straight to Roblox (render thread).
+void OnVrText(const char* utf8) {
+  std::lock_guard<std::mutex> lock(g_chat_mutex);
+  if (g_chat.active()) g_chat.Text(utf8);
+}
+
+bool OnVrKey(std::uint32_t scancode, bool ctrl) {
+  std::optional<std::string> sent;
+  size_t count = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_chat_mutex);
+    if (!g_chat.active()) return false;
+    switch (scancode) {
+      case SDL_SCANCODE_RETURN:
+      case SDL_SCANCODE_KP_ENTER: sent = g_chat.Key(ChatKey::kReturn, ctrl); break;
+      case SDL_SCANCODE_ESCAPE: g_chat.Key(ChatKey::kEscape, ctrl); break;
+      case SDL_SCANCODE_BACKSPACE: g_chat.Key(ChatKey::kBackspace, ctrl); break;
+      case SDL_SCANCODE_DELETE: g_chat.Key(ChatKey::kDelete, ctrl); break;
+      case SDL_SCANCODE_LEFT: g_chat.Key(ChatKey::kLeft, ctrl); break;
+      case SDL_SCANCODE_RIGHT: g_chat.Key(ChatKey::kRight, ctrl); break;
+      case SDL_SCANCODE_HOME: g_chat.Key(ChatKey::kHome, ctrl); break;
+      case SDL_SCANCODE_END: g_chat.Key(ChatKey::kEnd, ctrl); break;
+      case SDL_SCANCODE_A:
+        if (ctrl) g_chat.Key(ChatKey::kSelectAll, ctrl);
+        break;
+      default: break;
+    }
+    if (!sent) return false;
+    count = g_chat.last_length() > 0 ? g_chat.last_length() : sent->size();
+  }
+  if (!SpeakSent(*sent)) return false;
+  // Intercept Chat: Enter never reaches Roblox; clear and close the box
+  // through the VR keyboard's own path instead.
+  VrPressKey(SDL_SCANCODE_A, true);
+  for (size_t i = 0; i <= ClearPresses(count); ++i) VrPressKey(SDL_SCANCODE_BACKSPACE, false);
+  VrPressKey(SDL_SCANCODE_ESCAPE, false);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +236,10 @@ void SetMenuOpen(bool open) {
 // Once per event pump: apply requests coming from the menu.
 void MainThreadTick() {
   StartControl();
+  VrKeyboardObserver vr;
+  vr.text = OnVrText;
+  vr.key = OnVrKey;
+  HookVrKeyboard(vr);
   if (overlay::TakeCloseRequest()) SetMenuOpen(false);
   if (overlay::TakeOpenRequest() && Window() != nullptr) {
     SetMenuOpen(true);
@@ -361,6 +418,7 @@ EXPORT bool SDL_StartTextInputWithProperties(SDL_Window* window, SDL_PropertiesI
                         type == SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN ||
                         type == SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE;
     g_roblox_text_active = true;
+    std::lock_guard<std::mutex> lock(g_chat_mutex);
     g_chat.Open(secret, multiline);
   }
   return ok;
@@ -371,6 +429,7 @@ EXPORT bool SDL_StartTextInput(SDL_Window* window) {
   const bool ok = Cached(fn, "SDL_StartTextInput")(window);
   if (ok) {
     g_roblox_text_active = true;
+    std::lock_guard<std::mutex> lock(g_chat_mutex);
     g_chat.Open(false, false);
   }
   return ok;
@@ -379,7 +438,10 @@ EXPORT bool SDL_StartTextInput(SDL_Window* window) {
 EXPORT bool SDL_StopTextInput(SDL_Window* window) {
   static bool (*fn)(SDL_Window*);
   g_roblox_text_active = false;
-  g_chat.Close();
+  {
+    std::lock_guard<std::mutex> lock(g_chat_mutex);
+    g_chat.Close();
+  }
   // Keep text flowing to the menu if one of its fields still has focus.
   if (overlay::MenuOpen() && g_menu_started_text) return true;
   return Cached(fn, "SDL_StopTextInput")(window);
@@ -389,7 +451,10 @@ EXPORT char* SDL_GetClipboardText(void) {
   static char* (*fn)(void);
   char* text = Cached(fn, "SDL_GetClipboardText")();
   // Roblox reads the clipboard when you paste into a focused box.
-  if (text != nullptr && g_chat.active() && !overlay::MenuOpen()) g_chat.Paste(text);
+  if (text != nullptr && !overlay::MenuOpen()) {
+    std::lock_guard<std::mutex> lock(g_chat_mutex);
+    if (g_chat.active()) g_chat.Paste(text);
+  }
   return text;
 }
 

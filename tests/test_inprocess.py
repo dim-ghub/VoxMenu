@@ -158,7 +158,8 @@ class OverlayTest(unittest.TestCase):
             self.assertGreater(tab_underline_y(early) or 10**6, tab_underline_y(settled))
 
 
-def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engine=None, intercept_chat=False):
+def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engine=None, intercept_chat=False,
+            vr=False):
     # The mic plays a 300 Hz tone so "keep my microphone" is observable.
     tone = b"".join(struct.pack("<h", int(8000 * math.sin(2 * math.pi * 300 * i / 48000)))
                     for i in range(48000 * 8))
@@ -170,7 +171,7 @@ def capture(tmp: Path, keep_mic: bool, message="Hello there, how are you?", engi
     env = env_with_lib(tmp, config, SDL_AUDIO_DRIVER="disk",
                        SDL_AUDIO_DISK_INPUT_FILE=tmp / "micin.raw",
                        SDL_AUDIO_DISK_OUTPUT_FILE="/dev/null")
-    r = run([MIC, str(tmp / "out.raw"), "4.5", message], env)
+    r = run([MIC, str(tmp / "out.raw"), "4.5", message] + (["vr"] if vr else []), env)
     raw = (tmp / "out.raw").read_bytes()
     samples = struct.unpack(f"<{len(raw) // 2}h", raw)
     return r, [s / 32768 for s in samples]
@@ -225,6 +226,28 @@ class MicTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("speaking a chat message", r.stderr)
             self.assertIn("driver received key: 13", r.stderr, "Return key reaches the game")
+
+
+    def test_vr_keyboard_chat_is_spoken(self):
+        with tempdir() as t:
+            r, audio = capture(Path(t), keep_mic=False, message="Hello there from my headset, how are you?", vr=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("following the VR keyboard", r.stderr)
+            self.assertIn("speaking a chat message", r.stderr)
+            self.assertIn("vr host got key: 40\n", r.stderr, "Enter still reaches Roblox")
+            self.assertGreater(level(audio, 1.3, 3.0), 0.05, "speech is in the mic stream")
+
+    def test_vr_keyboard_intercept_chat(self):
+        with tempdir() as t:
+            r, audio = capture(Path(t), keep_mic=False, message="Hello there from my headset, how are you?", vr=True,
+                               intercept_chat=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("speaking a chat message", r.stderr)
+            self.assertNotIn("vr host got key: 40\n", r.stderr, "Enter kept from Roblox")
+            self.assertIn("vr host got key: 4 ctrl", r.stderr, "Ctrl+A selects the draft")
+            self.assertIn("vr host got key: 42", r.stderr, "Backspace clears it")
+            self.assertIn("vr host got key: 41", r.stderr, "Escape closes the box")
+            self.assertGreater(level(audio, 1.3, 3.0), 0.05, "speech is in the mic stream")
 
 
 if __name__ == "__main__":

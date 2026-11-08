@@ -13,7 +13,10 @@
 
 namespace nac {
 
-enum class ChatKey { kReturn, kEscape, kBackspace, kDelete, kLeft, kRight, kHome, kEnd };
+enum class ChatKey {
+  kReturn, kEscape, kBackspace, kDelete, kLeft, kRight, kHome, kEnd,
+  kSelectAll,  // Ctrl+A
+};
 
 class ChatTracker {
  public:
@@ -39,6 +42,7 @@ class ChatTracker {
   size_t last_length_ = 0;
   std::vector<std::string> chars_;  // one UTF-8 character per entry
   size_t cursor_ = 0;
+  bool selected_all_ = false;  // after Ctrl+A, until the next edit or move
 };
 
 }  // namespace nac

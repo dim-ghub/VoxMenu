@@ -80,6 +80,36 @@ int main() {
     auto sent = t.Key(ChatKey::kReturn, false);
     Expect(sent && *sent == "héllo", "backspace removes whole UTF-8 characters");
   }
+  {
+    // Ctrl+A then typing replaces everything (the VR keyboard's Select All).
+    ChatTracker t;
+    t.Open(false, false);
+    t.Text("old text");
+    t.Key(ChatKey::kSelectAll, false);
+    t.Text("new");
+    auto sent = t.Key(ChatKey::kReturn, false);
+    Expect(sent && *sent == "new", "typing after select-all replaces the text");
+  }
+  {
+    ChatTracker t;
+    t.Open(false, false);
+    t.Text("gone");
+    t.Key(ChatKey::kSelectAll, false);
+    t.Key(ChatKey::kBackspace, false);
+    t.Text("hi");
+    auto sent = t.Key(ChatKey::kReturn, false);
+    Expect(sent && *sent == "hi", "backspace after select-all empties the box");
+  }
+  {
+    ChatTracker t;
+    t.Open(false, false);
+    t.Text("bc");
+    t.Key(ChatKey::kSelectAll, false);
+    t.Key(ChatKey::kLeft, false);
+    t.Text("a");
+    auto sent = t.Key(ChatKey::kReturn, false);
+    Expect(sent && *sent == "abc", "left after select-all drops it at the start");
+  }
   std::printf(failures ? "chat_test: %d failure(s)\n" : "chat_test: all passed\n", failures);
   return failures ? 1 : 0;
 }

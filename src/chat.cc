@@ -35,9 +35,11 @@ void ChatTracker::Close() {
 void ChatTracker::Clear() {
   chars_.clear();
   cursor_ = 0;
+  selected_all_ = false;
 }
 
 void ChatTracker::Insert(const std::vector<std::string>& chars) {
+  if (selected_all_) Clear();  // typing replaces the selection
   chars_.insert(chars_.begin() + cursor_, chars.begin(), chars.end());
   cursor_ += chars.size();
 }
@@ -79,6 +81,27 @@ size_t ChatTracker::WordRight() const {
 
 std::optional<std::string> ChatTracker::Key(ChatKey key, bool ctrl) {
   if (!active_ || secret_) return std::nullopt;
+  if (selected_all_) {
+    // A selection of everything: deleting empties the box, moving drops it.
+    switch (key) {
+      case ChatKey::kBackspace:
+      case ChatKey::kDelete:
+        Clear();
+        return std::nullopt;
+      case ChatKey::kLeft:
+      case ChatKey::kHome:
+        selected_all_ = false;
+        cursor_ = 0;
+        return std::nullopt;
+      case ChatKey::kRight:
+      case ChatKey::kEnd:
+        selected_all_ = false;
+        cursor_ = chars_.size();
+        return std::nullopt;
+      default:
+        break;
+    }
+  }
   switch (key) {
     case ChatKey::kReturn: {
       if (multiline_) {
@@ -119,6 +142,9 @@ std::optional<std::string> ChatTracker::Key(ChatKey key, bool ctrl) {
       break;
     case ChatKey::kEnd:
       cursor_ = chars_.size();
+      break;
+    case ChatKey::kSelectAll:
+      selected_all_ = !chars_.empty();
       break;
   }
   return std::nullopt;
