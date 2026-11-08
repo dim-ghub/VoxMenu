@@ -4,8 +4,8 @@
 // at the moment Enter is pressed. Escape or losing focus throws the draft
 // away, as in-game. Password boxes are never tracked.
 
-#ifndef VOX_TTS_CHAT_H_
-#define VOX_TTS_CHAT_H_
+#ifndef VOX_MENU_CHAT_H_
+#define VOX_MENU_CHAT_H_
 
 #include <optional>
 #include <string>
@@ -47,4 +47,4 @@ class ChatTracker {
 
 }  // namespace nac
 
-#endif  // VOX_TTS_CHAT_H_
+#endif  // VOX_MENU_CHAT_H_

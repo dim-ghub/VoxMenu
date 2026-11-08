@@ -1,6 +1,6 @@
 # Speech Engines Guide
 
-Vox TTS supports three distinct speech synthesis backends. Each engine caters to different preferences, ranging from modern neural voices to retro speech synthesizers and game audio emulation.
+Vox Menu supports three distinct speech synthesis backends. Each engine caters to different preferences, ranging from modern neural voices to retro speech synthesizers and game audio emulation.
 
 ---
 
@@ -15,30 +15,30 @@ Vox TTS supports three distinct speech synthesis backends. Each engine caters to
 - **Speed Adjustment**: Real-time pace adjustment from 50% to 200% of normal speaking speed.
 
 ### Model Discovery
-Vox TTS automatically discovers `.onnx` models (and accompanying `.onnx.json` config files) by scanning directories recursively up to 8 levels deep:
+Vox Menu automatically discovers `.onnx` models (and accompanying `.onnx.json` config files) by scanning directories recursively up to 8 levels deep:
 - `$XDG_DATA_HOME/piper-voices` (default: `~/.local/share/piper-voices`)
 - `/usr/share/piper-voices` (used by distribution packages such as Arch/Artix `piper-voices-*`)
 - `/usr/local/share/piper-voices`
-- `$XDG_DATA_HOME/vox-tts/voices` and `~/.config/piper/voices`
+- `$XDG_DATA_HOME/vox-menu/voices` (and the older `vox-tts/voices`) and `~/.config/piper/voices`
 - Custom user-configured directory specified in the **Settings** menu.
 
 ### Downloading Neural Models
-Vox TTS provides a built-in helper utility to easily download voice models from Hugging Face into `~/.local/share/piper-voices`:
+Vox Menu provides a built-in helper utility to easily download voice models from Hugging Face into `~/.local/share/piper-voices`:
 
 ```bash
 # Download the default high-quality voice (en_US-lessac-medium)
-vox-tts-download-voice
+vox-menu-download-voice
 
 # Download other voices:
-vox-tts-download-voice en_US-amy-medium
-vox-tts-download-voice en_US-ryan-medium
-vox-tts-download-voice en_GB-alan-medium
+vox-menu-download-voice en_US-amy-medium
+vox-menu-download-voice en_US-ryan-medium
+vox-menu-download-voice en_GB-alan-medium
 ```
 
 Any `.onnx` files downloaded or copied into these folders appear automatically in the **Model Voice** picker in the in-game menu.
 
 ### Execution Pipeline
-Vox TTS supports both standalone binary distributions (`piper`) and Python package distributions (`piper-tts`):
+Vox Menu supports both standalone binary distributions (`piper`) and Python package distributions (`piper-tts`):
 - Invoked with `-m <model.onnx>` and `--length-scale <speed>`.
 - Audio is output to a temporary WAV container and decoded via `SDL_LoadWAV` into 32-bit floating point audio at 48 kHz.
 
@@ -64,7 +64,7 @@ Vox TTS supports both standalone binary distributions (`piper`) and Python packa
 
 ## 3. Animal Crossing (Animalese)
 
-Animalese is the iconic fictional language spoken by villagers throughout the *Animal Crossing* series. Rather than playing static audio clips, Vox TTS features a full algorithmic formant and noise synthesizer written from scratch (`src/synth.cc`).
+Animalese is the iconic fictional language spoken by villagers throughout the *Animal Crossing* series. Rather than playing static audio clips, Vox Menu features a full algorithmic formant and noise synthesizer written from scratch (`src/synth.cc`).
 
 ### How It Works
 Animalese works by converting input text into short phonetic speech "blips" timed in step with text display:

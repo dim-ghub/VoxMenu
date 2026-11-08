@@ -4,8 +4,8 @@
 // (Female 1–4, Male 1–4) for English and Korean, playing in step with the text box,
 // one blip per character, with subtle pitch jitter and question inflections.
 
-#ifndef VOX_TTS_SYNTH_H_
-#define VOX_TTS_SYNTH_H_
+#ifndef VOX_MENU_SYNTH_H_
+#define VOX_MENU_SYNTH_H_
 
 #include <cstdint>
 #include <map>
@@ -70,4 +70,4 @@ std::vector<float> Synthesize(const std::string& utf8,
 
 }  // namespace nac
 
-#endif  // VOX_TTS_SYNTH_H_
+#endif  // VOX_MENU_SYNTH_H_

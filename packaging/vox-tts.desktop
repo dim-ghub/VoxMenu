@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Vox TTS
-Comment=Local text-to-speech for Nightcap and Roblox voice chat
-Exec=vox-tts
-Icon=vox-tts
-Categories=Game;AudioVideo;
-StartupNotify=false
-Terminal=false

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Downloads a Piper voice model from Hugging Face into ~/.local/share/piper-voices.
 # Usage:
-#   vox-tts-download-voice [VOICE_NAME]
+#   vox-menu-download-voice [VOICE_NAME]
 #
 # Examples:
-#   vox-tts-download-voice en_US-lessac-medium
-#   vox-tts-download-voice en_US-amy-medium
-#   vox-tts-download-voice en_US-ryan-medium
+#   vox-menu-download-voice en_US-lessac-medium
+#   vox-menu-download-voice en_US-amy-medium
+#   vox-menu-download-voice en_US-ryan-medium
 
 set -euo pipefail
 

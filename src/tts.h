@@ -1,11 +1,11 @@
-// Local text-to-speech synthesis engine dispatcher for Vox TTS.
+// Local text-to-speech synthesis engine dispatcher for Vox Menu.
 // Supports:
 //   - Piper TTS: Fast local neural AI voices (ONNX)
 //   - eSpeak-NG: Lightweight, classic multi-language TTS
 //   - Animalese: Animal Crossing villager voices (Classic, NH, Bebebese)
 
-#ifndef VOX_TTS_TTS_H_
-#define VOX_TTS_TTS_H_
+#ifndef VOX_MENU_TTS_H_
+#define VOX_MENU_TTS_H_
 
 #include <string>
 #include <vector>
@@ -49,4 +49,4 @@ std::vector<float> SynthesizePiper(const std::string& text, const std::string& m
 
 }  // namespace nac
 
-#endif  // VOX_TTS_TTS_H_
+#endif  // VOX_MENU_TTS_H_

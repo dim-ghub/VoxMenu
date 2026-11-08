@@ -217,6 +217,7 @@ std::vector<PiperModelInfo> DiscoverPiperModels(const std::string& custom_dir) {
   const std::string data_home = DataHome();
   if (!data_home.empty()) {
     search_roots.push_back(data_home + "/piper-voices");
+    search_roots.push_back(data_home + "/vox-menu/voices");
     search_roots.push_back(data_home + "/vox-tts/voices");
     search_roots.push_back(data_home + "/nightcap-ac/voices");
   }

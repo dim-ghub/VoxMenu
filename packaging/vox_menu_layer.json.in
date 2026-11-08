@@ -1,20 +1,22 @@
 {
   "file_format_version": "1.2.0",
   "layer": {
-    "name": "VK_LAYER_VOX_TTS_overlay",
+    "name": "VK_LAYER_VOX_MENU_overlay",
     "type": "GLOBAL",
     "library_path": "@LIB@",
     "api_version": "1.3.0",
     "implementation_version": "1",
-    "description": "Vox TTS in-game menu",
+    "description": "Vox Menu in-game overlay",
     "functions": {
       "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion"
     },
     "enable_environment": {
+      "VOX_MENU_LAYER": "1",
       "VOX_TTS_LAYER": "1",
       "NIGHTCAP_AC_LAYER": "1"
     },
     "disable_environment": {
+      "DISABLE_VOX_MENU_LAYER": "1",
       "DISABLE_VOX_TTS_LAYER": "1",
       "DISABLE_NIGHTCAP_AC_LAYER": "1"
     }

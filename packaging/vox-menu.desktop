@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Vox Menu
+Comment=In-game menu for Nightcap: text-to-speech, HUD overlays, autoclicker and macros
+Exec=vox-menu
+Icon=vox-menu
+Categories=Game;Utility;
+StartupNotify=false
+Terminal=false

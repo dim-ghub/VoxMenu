@@ -1,8 +1,8 @@
-// Process-wide state shared by the SDL hooks, the speech engine and the
-// in-game menu.
+// Process-wide state shared by the SDL hooks, the speech engine, the
+// automation engine and the in-game menu.
 
-#ifndef VOX_TTS_APP_H_
-#define VOX_TTS_APP_H_
+#ifndef VOX_MENU_APP_H_
+#define VOX_MENU_APP_H_
 
 #include <dlfcn.h>
 
@@ -19,6 +19,10 @@ Config GetConfig();
 void SetConfig(const Config& config);
 void SaveConfigIfDirty();
 
+// An environment setting: VOX_MENU_<name>, or the older VOX_TTS_<name> /
+// NIGHTCAP_AC_<name>. nullptr when none is set.
+const char* Env(const char* name);
+
 // Lines go to stderr, which Nightcap copies into its session log.
 void Log(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
@@ -31,4 +35,4 @@ Fn Real(const char* name) {
 
 }  // namespace nac
 
-#endif  // VOX_TTS_APP_H_
+#endif  // VOX_MENU_APP_H_

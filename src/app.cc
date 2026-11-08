@@ -61,13 +61,20 @@ void SaveConfigIfDirty() {
   if (!copy.Save()) Log("could not save %s", Config::Path().c_str());
 }
 
+const char* Env(const char* name) {
+  for (const char* prefix : {"VOX_MENU_", "VOX_TTS_", "NIGHTCAP_AC_"}) {
+    if (const char* value = std::getenv((std::string(prefix) + name).c_str())) return value;
+  }
+  return nullptr;
+}
+
 void Log(const char* fmt, ...) {
   char buf[1024];
   va_list args;
   va_start(args, fmt);
   std::vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
-  std::fprintf(stderr, "  [vox-tts] %s\n", buf);
+  std::fprintf(stderr, "  [vox-menu] %s\n", buf);
 }
 
 }  // namespace nac

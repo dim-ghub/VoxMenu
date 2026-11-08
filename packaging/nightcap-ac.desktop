@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Nightcap AC
-GenericName=Roblox Player with Animalese chat
-Comment=Start Nightcap with Animalese chat (or open its menu if Nightcap is running)
-Exec=nightcap-ac
-Icon=io.github.CoderDayton.nightcap
-Categories=Game;
-Terminal=false

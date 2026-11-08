@@ -111,16 +111,19 @@ class MakeInstallTest(unittest.TestCase):
         self.target.parent.mkdir(parents=True)
         self.target.write_text("[Desktop Entry]\nName=Mine\nExec=mine\n")
 
-        out = self.make("install", NIGHTCAP_AC_DESKTOP="n")
+        out = self.make("install", VOX_MENU_DESKTOP="n")
         self.assertIn("Skipped the launcher patch", out)
-        self.assertTrue((self.prefix / "lib/nightcap-ac/libnightcap_ac.so").exists())
-        self.assertTrue((self.prefix / "bin/nightcap-ac").exists())
+        self.assertTrue((self.prefix / "lib/vox-menu/libvox_menu.so").exists())
+        self.assertTrue((self.prefix / "bin/vox-menu").exists())
+        # Older names still start Vox Menu.
+        self.assertEqual((self.prefix / "bin/nightcap-ac").resolve(), (self.prefix / "bin/vox-menu").resolve())
+        self.assertEqual((self.prefix / "bin/vox-tts").resolve(), (self.prefix / "bin/vox-menu").resolve())
         self.assertIn("Name=Mine", self.target.read_text())
 
-        self.make("install", NIGHTCAP_AC_DESKTOP="y")
+        self.make("install", VOX_MENU_DESKTOP="y")
         lines = self.target.read_text().splitlines()
-        self.assertEqual(lines[:2], ["[Desktop Entry]", "X-Nightcap-AC=true"])
-        self.assertIn(f"Exec=env SDL_VIDEODRIVER=wayland,x11 {self.prefix}/bin/nightcap-ac %u", lines)
+        self.assertEqual(lines[:2], ["[Desktop Entry]", "X-Vox-Menu=true"])
+        self.assertIn(f"Exec=env SDL_VIDEODRIVER=wayland,x11 {self.prefix}/bin/vox-menu %u", lines)
         self.assertIn("Exec=/usr/bin/mocktail --settings", lines)
         self.assertNotIn("X-Mocktail-Managed=true", lines)
 
@@ -128,7 +131,18 @@ class MakeInstallTest(unittest.TestCase):
         self.assertEqual(self.target.read_text(), "[Desktop Entry]\nName=Mine\nExec=mine\n")
 
         self.make("uninstall")
+        self.assertFalse((self.prefix / "bin/vox-menu").exists())
         self.assertFalse((self.prefix / "bin/nightcap-ac").exists())
+
+    def test_patch_from_an_older_version_is_recognised(self):
+        self.target.parent.mkdir(parents=True)
+        self.target.write_text("[Desktop Entry]\nX-Nightcap-AC=true\nExec=old\n")
+        self.make("install")  # no question asked: it's ours, so it is refreshed
+        lines = self.target.read_text().splitlines()
+        self.assertIn("X-Vox-Menu=true", lines)
+        self.assertNotIn("X-Nightcap-AC=true", lines)
+        self.make("unpatch-desktop")
+        self.assertFalse(self.target.exists())
 
 
 if __name__ == "__main__":

@@ -798,6 +798,9 @@ std::string ResolveAnimalesePath(const std::string& lang_in, const std::string& 
   const std::string candidates[] = {
       "assets/voices/animalese/" + lang + "/" + file,
       "../assets/voices/animalese/" + lang + "/" + file,
+      "/usr/local/share/vox-menu/voices/animalese/" + lang + "/" + file,
+      "/usr/share/vox-menu/voices/animalese/" + lang + "/" + file,
+      home + "/.local/share/vox-menu/voices/animalese/" + lang + "/" + file,
       "/usr/local/share/vox-tts/voices/animalese/" + lang + "/" + file,
       "/usr/share/vox-tts/voices/animalese/" + lang + "/" + file,
       home + "/.local/share/vox-tts/voices/animalese/" + lang + "/" + file,

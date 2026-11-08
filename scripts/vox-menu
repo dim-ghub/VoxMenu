@@ -1,42 +1,38 @@
 #!/usr/bin/env bash
-# Vox TTS launcher.
+# Vox Menu launcher.
 #
-#   vox-tts [NIGHTCAP ARGS]          start Nightcap with Vox TTS loaded
+#   vox-menu [NIGHTCAP ARGS]          start Nightcap with Vox Menu loaded
 #
 # (Installing, and patching Nightcap's launcher entry, is done by make:
 # see the Makefile's install and patch-desktop targets.)
 #
 # Starting it checks what is running first:
-#   * Nightcap not running: start it with Vox TTS.
-#   * Running with Vox TTS: open the in-game menu (or hand a clicked
+#   * Nightcap not running: start it with Vox Menu.
+#   * Running with Vox Menu: open the in-game menu (or hand a clicked
 #     roblox:// link to it).
-#   * Running without it: offer to restart it with Vox TTS, optionally
+#   * Running without it: offer to restart it with Vox Menu, optionally
 #     rejoining the same server.
 #
-# Vox TTS loads libvox_tts.so: preloaded for its SDL hooks and named in
+# Vox Menu loads libvox_menu.so: preloaded for its SDL hooks and named in
 # a Vulkan layer manifest for the in-game menu.
 
 set -u
 
 FLATPAK_ID=io.github.CoderDayton.nightcap
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/vox-tts"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/vox-menu"
 
 self="$(readlink -f "$0")"
 here="$(dirname "$self")"
 
-note() { printf 'vox-tts: %s\n' "$*" >&2; }
+note() { printf 'vox-menu: %s\n' "$*" >&2; }
 
 find_lib() {
   local candidate
-  for candidate in "${VOX_TTS_LIB:-${NIGHTCAP_AC_LIB:-}}" \
-      "$here/../lib/vox-tts/libvox_tts.so" \
-      "$here/../build/libvox_tts.so" \
-      "$HOME/.local/lib/vox-tts/libvox_tts.so" \
-      /usr/lib/vox-tts/libvox_tts.so \
-      "$here/../lib/nightcap-ac/libnightcap_ac.so" \
-      "$here/../build/libnightcap_ac.so" \
-      "$HOME/.local/lib/nightcap-ac/libnightcap_ac.so" \
-      /usr/lib/nightcap-ac/libnightcap_ac.so; do
+  for candidate in "${VOX_MENU_LIB:-${VOX_TTS_LIB:-${NIGHTCAP_AC_LIB:-}}}" \
+      "$here/../lib/vox-menu/libvox_menu.so" \
+      "$here/../build/libvox_menu.so" \
+      "$HOME/.local/lib/vox-menu/libvox_menu.so" \
+      /usr/lib/vox-menu/libvox_menu.so; do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       readlink -f "$candidate"
       return 0
@@ -49,14 +45,25 @@ find_lib() {
 # loader then reuses the preloaded copy) and prints its directory.
 layer_dir() {
   local lib="$1" template dir="$RUNTIME_DIR/layer"
-  for template in "$here/../share/vox-tts/vox_tts_layer.json.in" \
-      "$here/../packaging/vox_tts_layer.json.in" \
-      "$here/../share/nightcap-ac/nightcap_ac_layer.json.in" \
-      "$here/../packaging/nightcap_ac_layer.json.in"; do
+  for template in "$here/../share/vox-menu/vox_menu_layer.json.in" \
+      "$here/../packaging/vox_menu_layer.json.in"; do
     [[ -f "$template" ]] && break
   done
   mkdir -p "$dir" && chmod 700 "$RUNTIME_DIR"
-  sed "s|@LIB@|$lib|" "$template" > "$dir/vox_tts_layer.json"
+  sed "s|@LIB@|$lib|" "$template" > "$dir/vox_menu_layer.json"
+  printf '%s\n' "$dir"
+}
+
+# The same for the OpenXR API layer (Vox Menu in a VR headset), in a folder
+# of its own: the OpenXR loader reads every manifest in it.
+xr_layer_dir() {
+  local lib="$1" template dir="$RUNTIME_DIR/xr-layer"
+  for template in "$here/../share/vox-menu/vox_menu_xr_layer.json.in" \
+      "$here/../packaging/vox_menu_xr_layer.json.in"; do
+    [[ -f "$template" ]] && break
+  done
+  mkdir -p "$dir" && chmod 700 "$RUNTIME_DIR"
+  sed "s|@LIB@|$lib|" "$template" > "$dir/vox_menu_xr_layer.json"
   printf '%s\n' "$dir"
 }
 
@@ -89,7 +96,7 @@ find_nightcap() {
   return 1
 }
 
-is_hooked() { grep -q -E "(libvox_tts\.so|libnightcap_ac\.so)" "/proc/$1/maps" 2>/dev/null; }
+is_hooked() { grep -q -E "(libvox_menu\.so|libvox_tts\.so|libnightcap_ac\.so)" "/proc/$1/maps" 2>/dev/null; }
 
 # The server this Nightcap is in, as a roblox:// link (empty when not in one):
 # the last "Joining game" in its session log, unless a leave came after it.
@@ -136,15 +143,15 @@ stop_nightcap() {
 # Prints the chosen action: rejoin, restart or cancel.
 ask_restart() {
   local game="$1" link="$2" text answer status
-  text="Nightcap is already running without Vox TTS. Restart it so your chat is spoken in voice chat?"
+  text="Nightcap is already running without Vox Menu. Restart it with Vox Menu loaded?"
   if command -v zenity >/dev/null; then
     if [[ -n "$link" ]]; then
-      zenity --question --title="Vox TTS" --text="$text\n\nIt will open the game you clicked." \
+      zenity --question --title="Vox Menu" --text="$text\n\nIt will open the game you clicked." \
         --ok-label="Restart" --cancel-label="Not now" 2>/dev/null && echo restart || echo cancel
       return
     fi
     if [[ -n "$game" ]]; then
-      answer=$(zenity --question --title="Vox TTS" --text="$text" \
+      answer=$(zenity --question --title="Vox Menu" --text="$text" \
         --ok-label="Restart and rejoin" --extra-button="Restart only" --cancel-label="Not now" 2>/dev/null)
       status=$?
       if [[ $status -eq 0 ]]; then echo rejoin
@@ -153,7 +160,7 @@ ask_restart() {
       fi
       return
     fi
-    zenity --question --title="Vox TTS" --text="$text" \
+    zenity --question --title="Vox Menu" --text="$text" \
       --ok-label="Restart" --cancel-label="Not now" 2>/dev/null && echo restart || echo cancel
     return
   fi
@@ -168,26 +175,30 @@ ask_restart() {
     fi
     return
   fi
-  note "Nightcap is running without Vox TTS; close it and start it again"
+  note "Nightcap is running without Vox Menu; close it and start it again"
   echo cancel
 }
 
 # --- starting -----------------------------------------------------------------
 
 exec_nightcap() {
-  local lib layer native
-  lib=$(find_lib) || { note "libvox_tts.so not found; run 'make install'"; exit 1; }
+  local lib layer xr_layer xr_name=XR_APILAYER_VOXMENU_overlay native
+  lib=$(find_lib) || { note "libvox_menu.so not found; run 'make install'"; exit 1; }
   layer=$(layer_dir "$lib")
+  xr_layer=$(xr_layer_dir "$lib")
   native=$(command -v mocktail || true)
   if [[ -n "$native" ]]; then
     exec env LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" \
       VK_ADD_IMPLICIT_LAYER_PATH="$layer${VK_ADD_IMPLICIT_LAYER_PATH:+:$VK_ADD_IMPLICIT_LAYER_PATH}" \
-      VOX_TTS_LAYER=1 NIGHTCAP_AC_LAYER=1 SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland,x11}" \
+      XR_API_LAYER_PATH="$xr_layer${XR_API_LAYER_PATH:+:$XR_API_LAYER_PATH}" \
+      XR_ENABLE_API_LAYERS="$xr_name${XR_ENABLE_API_LAYERS:+:$XR_ENABLE_API_LAYERS}" \
+      VOX_MENU_LAYER=1 SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland,x11}" \
       "$native" "$@"
   fi
   if command -v flatpak >/dev/null && flatpak info "$FLATPAK_ID" >/dev/null 2>&1; then
     exec flatpak run --filesystem="$(dirname "$lib")":ro --filesystem="$RUNTIME_DIR" \
-      --env=LD_PRELOAD="$lib" --env=VK_ADD_IMPLICIT_LAYER_PATH="$layer" --env=VOX_TTS_LAYER=1 --env=NIGHTCAP_AC_LAYER=1 \
+      --env=LD_PRELOAD="$lib" --env=VK_ADD_IMPLICIT_LAYER_PATH="$layer" --env=VOX_MENU_LAYER=1 \
+      --env=XR_API_LAYER_PATH="$xr_layer" --env=XR_ENABLE_API_LAYERS="$xr_name" \
       "$FLATPAK_ID" "$@"
   fi
   note "Nightcap is not installed"
@@ -207,12 +218,13 @@ launch() {
     fi
     # Open the in-game menu of the running Nightcap.
     local sock="$RUNTIME_DIR/control-$pid.sock"
-    [[ ! -S "$sock" ]] && sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nightcap-ac/control-$pid.sock"
+    # (an older Vox Menu still running uses its old socket directory)
+    [[ ! -S "$sock" ]] && sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/vox-tts/control-$pid.sock"
     if command -v python3 >/dev/null; then
       python3 -I -c 'import socket,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); s.sendto(b"open",sys.argv[1])' \
-        "$sock" 2>/dev/null || note "press F8 in Nightcap to open Vox TTS"
+        "$sock" 2>/dev/null || note "press F8 in Nightcap to open Vox Menu"
     else
-      note "Vox TTS is already running; press F8 in Nightcap"
+      note "Vox Menu is already running; press F8 in Nightcap"
     fi
     exit 0
   fi
