@@ -1,5 +1,7 @@
 #include "overlay.h"
 
+#include <chrono>
+#include <deque>
 #include <mutex>
 
 #include "app.h"
@@ -14,6 +16,21 @@ std::atomic<bool> g_open{false};
 std::atomic<bool> g_close_requested{false};
 std::atomic<bool> g_open_requested{false};
 std::atomic<bool> g_wants_text{false};
+std::atomic<bool> g_capture_mouse{false};
+std::atomic<bool> g_wants_escape{false};
+std::atomic<bool> g_cursor_free{true};
+std::atomic<bool> g_focused{true};
+std::vector<Rect> g_hot;  // under g_mutex
+
+std::atomic<bool> g_keys[SDL_SCANCODE_COUNT];
+std::atomic<bool> g_buttons[3];
+std::mutex g_click_mutex;
+std::deque<std::chrono::steady_clock::time_point> g_clicks[3];
+
+void DropOldClicks(std::deque<std::chrono::steady_clock::time_point>& q,
+                   std::chrono::steady_clock::time_point now) {
+  while (!q.empty() && now - q.front() > std::chrono::seconds(1)) q.pop_front();
+}
 
 }  // namespace
 
@@ -61,6 +78,56 @@ void SetMousePos(float x, float y) {
   std::lock_guard<std::mutex> lock(g_mutex);
   g_metrics.mouse_x = x;
   g_metrics.mouse_y = y;
+}
+
+void SetHotRects(std::vector<Rect> rects) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  g_hot = std::move(rects);
+}
+
+bool InHotRect(float x, float y) {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  for (const Rect& r : g_hot) {
+    if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return true;
+  }
+  return false;
+}
+
+void SetCaptureMouse(bool capture) { g_capture_mouse = capture; }
+bool CaptureMouse() { return g_capture_mouse.load(); }
+void SetWantsEscape(bool wants) { g_wants_escape = wants; }
+bool WantsEscape() { return g_wants_escape.load(); }
+void SetWindowFocused(bool focused) { g_focused = focused; }
+bool WindowFocused() { return g_focused.load(); }
+void SetCursorFree(bool free) { g_cursor_free = free; }
+bool CursorFree() { return g_cursor_free.load(); }
+
+void NoteKey(SDL_Scancode scancode, bool down) {
+  if (scancode > SDL_SCANCODE_UNKNOWN && scancode < SDL_SCANCODE_COUNT) g_keys[scancode] = down;
+}
+
+bool KeyHeld(SDL_Scancode scancode) {
+  return scancode > SDL_SCANCODE_UNKNOWN && scancode < SDL_SCANCODE_COUNT && g_keys[scancode].load();
+}
+
+void NoteButton(int button, bool down) {
+  if (button < 0 || button > 2) return;
+  if (down && !g_buttons[button]) {
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(g_click_mutex);
+    g_clicks[button].push_back(now);
+    DropOldClicks(g_clicks[button], now);
+  }
+  g_buttons[button] = down;
+}
+
+bool ButtonHeld(int button) { return button >= 0 && button <= 2 && g_buttons[button].load(); }
+
+int ClicksPerSecond(int button) {
+  if (button < 0 || button > 2) return 0;
+  std::lock_guard<std::mutex> lock(g_click_mutex);
+  DropOldClicks(g_clicks[button], std::chrono::steady_clock::now());
+  return static_cast<int>(g_clicks[button].size());
 }
 
 bool ButtonRect(int window_w, float* x, float* y, float* size) {
