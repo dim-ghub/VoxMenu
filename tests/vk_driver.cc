@@ -8,6 +8,8 @@
 //   <frame> key <SDL keycode>          press and release a key
 //   <frame> click <x> <y>              left click at window coordinates
 //   <frame> move <x> <y>               move the mouse there
+//   <frame> press <x> <y>              left button down there (for drags)
+//   <frame> release <x> <y>            left button up there
 //   <frame> text <utf8>                text input event
 
 #include <SDL3/SDL.h>
@@ -46,7 +48,7 @@ std::vector<Action> LoadScript(const char* path) {
     std::istringstream ss(line);
     Action a;
     if (!(ss >> a.frame >> a.kind)) continue;
-    if (a.kind == "click" || a.kind == "move") ss >> a.x >> a.y;
+    if (a.kind == "click" || a.kind == "move" || a.kind == "press" || a.kind == "release") ss >> a.x >> a.y;
     std::getline(ss >> std::ws, a.arg);
     actions.push_back(a);
   }
@@ -82,6 +84,20 @@ void Inject(SDL_Window* window, const Action& a) {
     SDL_PushEvent(&e);
     e.type = SDL_EVENT_MOUSE_BUTTON_UP;
     e.button.down = false;
+    SDL_PushEvent(&e);
+  } else if (a.kind == "press" || a.kind == "release") {
+    e.type = SDL_EVENT_MOUSE_MOTION;
+    e.motion.windowID = id;
+    e.motion.x = a.x;
+    e.motion.y = a.y;
+    SDL_PushEvent(&e);
+    SDL_zero(e);
+    e.type = a.kind == "press" ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.windowID = id;
+    e.button.button = SDL_BUTTON_LEFT;
+    e.button.down = a.kind == "press";
+    e.button.x = a.x;
+    e.button.y = a.y;
     SDL_PushEvent(&e);
   } else if (a.kind == "move") {
     e.type = SDL_EVENT_MOUSE_MOTION;

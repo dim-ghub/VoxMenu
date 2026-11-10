@@ -6,6 +6,10 @@
 //     from the physical keyboard here and the VR keyboard (vr_keyboard.cc).
 //   * Events: open/close the menu (F8 or the top-bar button) and, while it
 //     is open, give mouse and keyboard to the menu instead of the game.
+//     While it is closed, the floating automation window and click-point
+//     markers still take the mouse where they are drawn.
+//   * Automation: hotkeys, recording macros, and the clicks and keys the
+//     autoclicker and macros inject (automation.cc).
 //   * Mouse mode: while the menu is open, keep the cursor free and visible
 //     even if Nightcap asks for first-person mouse lock; restore it after.
 //   * Audio: remember which streams are microphones and mix speech into
@@ -21,9 +25,13 @@
 #include <unordered_set>
 
 #include "app.h"
+#include "automation.h"
 #include "chat.h"
 #include "control.h"
+#include "inject.h"
+#include "nightcap.h"
 #include "overlay.h"
+#include "servers.h"
 #include "speech.h"
 #include "vr_keyboard.h"
 
@@ -87,6 +95,10 @@ void InjectKeyEvent(SDL_EventType type, SDL_Keycode key, SDL_Scancode scancode,
   g_injected_events.push_back(ev);
 }
 
+// The last real mouse device, for injected mouse events.
+SDL_MouseID g_mouse_id = 0;
+SDL_MouseButtonFlags g_injected_buttons = 0;
+
 void InjectKeyPress(SDL_Keycode key, SDL_Scancode scancode, SDL_Keymod mod, SDL_WindowID win) {
   InjectKeyEvent(SDL_EVENT_KEY_DOWN, key, scancode, mod, win);
   InjectKeyEvent(SDL_EVENT_KEY_UP, key, scancode, mod, win);
@@ -94,7 +106,6 @@ void InjectKeyPress(SDL_Keycode key, SDL_Scancode scancode, SDL_Keymod mod, SDL_
 
 void QueueClearAndCloseChat(SDL_WindowID win, size_t char_count) {
   std::lock_guard<std::mutex> lock(g_injected_mutex);
-  g_injected_events.clear();
 
   // 1. Select all text with Ctrl+A
   InjectKeyEvent(SDL_EVENT_KEY_DOWN, SDLK_LCTRL, SDL_SCANCODE_LCTRL, SDL_KMOD_LCTRL, win);
@@ -236,6 +247,7 @@ void SetMenuOpen(bool open) {
 // Once per event pump: apply requests coming from the menu.
 void MainThreadTick() {
   StartControl();
+  nightcap::Attach();
   VrKeyboardObserver vr;
   vr.text = OnVrText;
   vr.key = OnVrKey;
@@ -245,9 +257,14 @@ void MainThreadTick() {
     SetMenuOpen(true);
     SDL_RaiseWindow(Window());
   }
-  if (!overlay::MenuOpen()) return;
   SDL_Window* window = Window();
+  overlay::SetCursorFree(overlay::MenuOpen() || window == nullptr ||
+                         !Real<bool (*)(SDL_Window*)>("SDL_GetWindowRelativeMouseMode")(window));
+  automation::Tick();
+  std::string clip;
+  if (servers::TakeClipboard(&clip)) SDL_SetClipboardText(clip.c_str());
   if (window == nullptr) return;
+  // The menu, or a field in the floating window, wants typed text.
   const bool wants = overlay::WantsText();
   if (wants && !g_menu_started_text && !g_roblox_text_active) {
     g_menu_started_text = Real<bool (*)(SDL_Window*)>("SDL_StartTextInput")(window);
@@ -274,6 +291,83 @@ void TrackWindow(SDL_WindowID id) {
   }
 }
 
+// Mouse buttons pressed on a floating window; their release (and the drag
+// in between) belongs to it too.
+unsigned g_floating_buttons = 0;
+
+// With the menu closed: input for the floating windows. True when it must
+// not reach the game.
+bool FilterFloating(const SDL_Event& e, int button, bool cursor_free) {
+  overlay::Input in;
+  switch (e.type) {
+    case SDL_EVENT_MOUSE_MOTION:
+      if (!cursor_free && g_floating_buttons == 0) return false;
+      in.type = overlay::Input::kMousePos;
+      in.x = e.motion.x;
+      in.y = e.motion.y;
+      overlay::PushInput(in);
+      return g_floating_buttons != 0;  // dragging a window: keep the camera still
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+      if (button < 0) return false;
+      const bool down = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+      const unsigned bit = 1u << button;
+      const bool ours = down ? cursor_free && (overlay::CaptureMouse() || overlay::InHotRect(e.button.x, e.button.y))
+                             : (g_floating_buttons & bit) != 0;
+      if (!ours) {
+        // Clicking into the game takes the keyboard back from a text field.
+        if (down && overlay::WantsText()) {
+          in.type = overlay::Input::kBlur;
+          overlay::PushInput(in);
+        }
+        return false;
+      }
+      g_floating_buttons = down ? g_floating_buttons | bit : g_floating_buttons & ~bit;
+      in.type = overlay::Input::kMouseButton;
+      in.down = down;
+      in.button = button;
+      in.x = e.button.x;
+      in.y = e.button.y;
+      overlay::PushInput(in);
+      return true;
+    }
+    case SDL_EVENT_MOUSE_WHEEL: {
+      const overlay::Metrics m = overlay::GetMetrics();
+      if (!cursor_free || !overlay::InHotRect(m.mouse_x, m.mouse_y)) return false;
+      in.type = overlay::Input::kWheel;
+      in.x = e.wheel.x;
+      in.y = e.wheel.y;
+      overlay::PushInput(in);
+      return true;
+    }
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+      // Typing into a field of the floating window.
+      if (!overlay::WantsText()) return false;
+      if (e.key.key == SDLK_ESCAPE) {
+        in.type = overlay::Input::kBlur;
+      } else {
+        in.type = overlay::Input::kKey;
+        in.down = e.type == SDL_EVENT_KEY_DOWN;
+        in.key = e.key.key;
+        in.mod = e.key.mod;
+      }
+      overlay::PushInput(in);
+      return true;
+    case SDL_EVENT_TEXT_INPUT:
+      if (!overlay::WantsText() || e.text.text == nullptr) return false;
+      in.type = overlay::Input::kText;
+      in.text = e.text.text;
+      overlay::PushInput(in);
+      return true;
+    case SDL_EVENT_TEXT_EDITING:
+    case SDL_EVENT_TEXT_EDITING_CANDIDATES:
+      return overlay::WantsText();
+    default:
+      return false;
+  }
+}
+
 // Returns true when the event belongs to us and must not reach Nightcap.
 bool Filter(SDL_Event& e) {
   switch (e.type) {
@@ -282,22 +376,50 @@ bool Filter(SDL_Event& e) {
     case SDL_EVENT_MOUSE_MOTION: TrackWindow(e.motion.windowID); break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP: TrackWindow(e.button.windowID); break;
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+      overlay::SetWindowFocused(e.type == SDL_EVENT_WINDOW_FOCUS_GAINED);
+      break;
     case SDL_EVENT_WINDOW_RESIZED:
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: TrackWindow(e.window.windowID); break;
     default: break;
   }
 
+  const bool is_key = e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP;
+  const bool is_button = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+  const int button = !is_button                             ? -1
+                     : e.button.button == SDL_BUTTON_LEFT   ? 0
+                     : e.button.button == SDL_BUTTON_RIGHT  ? 1
+                     : e.button.button == SDL_BUTTON_MIDDLE ? 2
+                                                            : -1;
+  // What the player presses, for the keystrokes HUD.
+  if (is_key) overlay::NoteKey(e.key.scancode, e.type == SDL_EVENT_KEY_DOWN);
+  if (button >= 0) overlay::NoteButton(button, e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+  if (e.type == SDL_EVENT_MOUSE_MOTION) g_mouse_id = e.motion.which;
+  if (is_button) g_mouse_id = e.button.which;
+
   const bool open = overlay::MenuOpen();
-  if ((e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) && e.key.key == SDLK_F8) {
+  if (is_key && e.key.key == SDLK_F8) {
     if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) SetMenuOpen(!open);
     return true;
   }
+  // The layout editor or a click-point pick: Escape backs out of that.
+  if (is_key && e.key.key == SDLK_ESCAPE && overlay::WantsEscape()) {
+    overlay::Input in;
+    in.type = overlay::Input::kKey;
+    in.down = e.type == SDL_EVENT_KEY_DOWN;
+    in.key = e.key.key;
+    overlay::PushInput(in);
+    return true;
+  }
+  if (is_key && !overlay::WantsText() && automation::HandleHotkey(e.key)) return true;
   if (!open) {
     if (e.type == SDL_EVENT_MOUSE_MOTION) overlay::SetMousePos(e.motion.x, e.motion.y);
-    // The top-bar button works whenever the cursor is free (not in
-    // first-person mouse lock).
+    // The top-bar button and floating windows work whenever the cursor is
+    // free (not in first-person mouse lock).
     SDL_Window* window = Window();
     const bool cursor_free = window == nullptr || !SDL_GetWindowRelativeMouseMode(window);
+    if (FilterFloating(e, button, cursor_free)) return true;
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT &&
         cursor_free && InButton(e.button.x, e.button.y)) {
       g_swallow_button_up = true;
@@ -310,6 +432,7 @@ bool Filter(SDL_Event& e) {
       return true;
     }
     if (ObserveChat(e)) return true;
+    automation::Observe(e);
     return false;
   }
 
@@ -401,6 +524,71 @@ Fn Cached(Fn& slot, const char* name) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// Injected input (automation)
+
+namespace inject {
+
+void MouseMove(float x, float y) {
+  SDL_Event ev;
+  std::memset(&ev, 0, sizeof(ev));
+  ev.type = SDL_EVENT_MOUSE_MOTION;
+  ev.motion.timestamp = SDL_GetTicksNS();
+  ev.motion.windowID = g_window_id;
+  ev.motion.which = g_mouse_id;
+  ev.motion.state = g_injected_buttons;
+  ev.motion.x = x;
+  ev.motion.y = y;
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  g_injected_events.push_back(ev);
+}
+
+void MouseButton(int button, bool down, float x, float y) {
+  const Uint8 sdl_button = button == 1 ? SDL_BUTTON_RIGHT : button == 2 ? SDL_BUTTON_MIDDLE : SDL_BUTTON_LEFT;
+  SDL_Event ev;
+  std::memset(&ev, 0, sizeof(ev));
+  ev.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+  ev.button.timestamp = SDL_GetTicksNS();
+  ev.button.windowID = g_window_id;
+  ev.button.which = g_mouse_id;
+  ev.button.button = sdl_button;
+  ev.button.down = down;
+  ev.button.clicks = 1;
+  ev.button.x = x;
+  ev.button.y = y;
+  if (down) g_injected_buttons |= SDL_BUTTON_MASK(sdl_button);
+  else g_injected_buttons &= ~SDL_BUTTON_MASK(sdl_button);
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  g_injected_events.push_back(ev);
+}
+
+void Key(SDL_Scancode scancode, bool down) {
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  InjectKeyEvent(down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP, SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, false),
+                 scancode, SDL_KMOD_NONE, g_window_id);
+}
+
+void Text(const std::string& utf8) {
+  // SDL events point at their text; keep the last few alive until read.
+  static std::deque<std::string> texts;
+  std::lock_guard<std::mutex> lock(g_injected_mutex);
+  texts.push_back(utf8);
+  if (texts.size() > 256) texts.pop_front();
+  SDL_Event ev;
+  std::memset(&ev, 0, sizeof(ev));
+  ev.type = SDL_EVENT_TEXT_INPUT;
+  ev.text.timestamp = SDL_GetTicksNS();
+  ev.text.windowID = g_window_id;
+  ev.text.text = texts.back().c_str();
+  g_injected_events.push_back(ev);
+}
+
+void Warp(float x, float y) {
+  if (SDL_Window* window = Window()) Real<void (*)(SDL_Window*, float, float)>("SDL_WarpMouseInWindow")(window, x, y);
+}
+
+}  // namespace inject
 }  // namespace nac
 
 using namespace nac;
@@ -443,7 +631,7 @@ EXPORT bool SDL_StopTextInput(SDL_Window* window) {
     g_chat.Close();
   }
   // Keep text flowing to the menu if one of its fields still has focus.
-  if (overlay::MenuOpen() && g_menu_started_text) return true;
+  if ((overlay::MenuOpen() || overlay::WantsText()) && g_menu_started_text) return true;
   return Cached(fn, "SDL_StopTextInput")(window);
 }
 
