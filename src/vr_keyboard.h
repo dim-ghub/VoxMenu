@@ -5,8 +5,8 @@
 // in front of them, so VR typing reaches the chat tracker like a physical
 // keyboard does.
 
-#ifndef VOX_TTS_VR_KEYBOARD_H_
-#define VOX_TTS_VR_KEYBOARD_H_
+#ifndef VOX_MENU_VR_KEYBOARD_H_
+#define VOX_MENU_VR_KEYBOARD_H_
 
 #include <cstdint>
 
@@ -30,4 +30,4 @@ bool VrPressKey(std::uint32_t scancode, bool ctrl);
 
 }  // namespace nac
 
-#endif  // VOX_TTS_VR_KEYBOARD_H_
+#endif  // VOX_MENU_VR_KEYBOARD_H_

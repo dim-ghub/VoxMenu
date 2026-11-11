@@ -1,17 +1,13 @@
 #include "vr_keyboard.h"
 
-#include <elf.h>
-#include <fcntl.h>
-#include <link.h>
 #include <pthread.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <atomic>
 #include <cstring>
+#include <string_view>
 
 #include "app.h"
+#include "exe_symbols.h"
 
 namespace nac {
 namespace {
@@ -41,73 +37,24 @@ std::atomic<void*> g_context{nullptr};
 std::atomic<void (*)(void*, const char*)> g_real_commit{nullptr};
 std::atomic<void (*)(void*, std::uint32_t, bool)> g_real_press{nullptr};
 
-bool EndsWith(const char* s, size_t len, const char* suffix) {
+bool EndsWith(std::string_view s, const char* suffix) {
   const size_t n = std::strlen(suffix);
-  return len >= n && std::memcmp(s + len - n, suffix, n) == 0;
+  return s.size() >= n && s.compare(s.size() - n, n, suffix) == 0;
 }
 
-// The main program's load bias (0 for a non-PIE executable).
-int FirstObject(struct dl_phdr_info* info, size_t, void* out) {
-  *static_cast<ElfW(Addr)*>(out) = info->dlpi_addr;
-  return 1;  // the first entry is the executable
-}
-
-// Reads the executable's static symbol table. Nightcap ships unstripped,
-// but a stripped build simply has no match.
 bool FindSymbols() {
-  const int fd = open("/proc/self/exe", O_RDONLY | O_CLOEXEC);
-  if (fd < 0) return false;
-  struct stat st {};
-  void* map = MAP_FAILED;
-  if (fstat(fd, &st) == 0 && st.st_size > static_cast<off_t>(sizeof(Elf64_Ehdr))) {
-    map = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  }
-  close(fd);
-  if (map == MAP_FAILED) return false;
-
-  const auto* base = static_cast<const unsigned char*>(map);
-  const size_t size = st.st_size;
-  ElfW(Addr) host_addr = 0, mutex_addr = 0;
-  const auto* eh = reinterpret_cast<const Elf64_Ehdr*>(base);
-  const bool elf = std::memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0 &&
-                   eh->e_ident[EI_CLASS] == ELFCLASS64 &&
-                   eh->e_shentsize == sizeof(Elf64_Shdr) && eh->e_shoff < size &&
-                   eh->e_shnum <= (size - eh->e_shoff) / sizeof(Elf64_Shdr);
-  if (elf) {
-    const auto* sh = reinterpret_cast<const Elf64_Shdr*>(base + eh->e_shoff);
-    for (unsigned i = 0; i < eh->e_shnum; ++i) {
-      if (sh[i].sh_type != SHT_SYMTAB || sh[i].sh_link >= eh->e_shnum) continue;
-      const Elf64_Shdr& strs = sh[sh[i].sh_link];
-      if (sh[i].sh_offset > size || sh[i].sh_size > size - sh[i].sh_offset ||
-          strs.sh_offset > size || strs.sh_size > size - strs.sh_offset) {
-        continue;
-      }
-      const auto* syms = reinterpret_cast<const Elf64_Sym*>(base + sh[i].sh_offset);
-      const size_t count = sh[i].sh_size / sizeof(Elf64_Sym);
-      const char* names = reinterpret_cast<const char*>(base + strs.sh_offset);
-      for (size_t j = 0; j < count; ++j) {
-        const Elf64_Sym& sym = syms[j];
-        if (ELF64_ST_TYPE(sym.st_info) != STT_OBJECT || sym.st_name >= strs.sh_size) continue;
-        const char* name = names + sym.st_name;
-        const size_t len = strnlen(name, strs.sh_size - sym.st_name);
-        if (len < sizeof(kPrefix) - 1 || std::memcmp(name, kPrefix, sizeof(kPrefix) - 1) != 0) {
-          continue;
-        }
-        if (EndsWith(name, len, kHostSuffix) && sym.st_size == sizeof(Host)) {
-          host_addr = sym.st_value;
-        } else if (EndsWith(name, len, kMutexSuffix) && sym.st_size == sizeof(pthread_mutex_t)) {
-          mutex_addr = sym.st_value;
-        }
-      }
-    }
-  }
-  munmap(map, size);
-  if (host_addr == 0 || mutex_addr == 0) return false;
-
-  ElfW(Addr) bias = 0;
-  dl_iterate_phdr(FirstObject, &bias);
-  g_host = reinterpret_cast<Host*>(bias + host_addr);
-  g_host_mutex = reinterpret_cast<pthread_mutex_t*>(bias + mutex_addr);
+  void* found[2];
+  const bool ok = FindExeObjects(
+      [](std::string_view name, size_t size) {
+        if (name.compare(0, sizeof(kPrefix) - 1, kPrefix) != 0) return -1;
+        if (EndsWith(name, kHostSuffix) && size == sizeof(Host)) return 0;
+        if (EndsWith(name, kMutexSuffix) && size == sizeof(pthread_mutex_t)) return 1;
+        return -1;
+      },
+      found, 2);
+  if (!ok) return false;
+  g_host = static_cast<Host*>(found[0]);
+  g_host_mutex = static_cast<pthread_mutex_t*>(found[1]);
   return true;
 }
 
