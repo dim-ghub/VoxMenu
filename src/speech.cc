@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "app.h"
+#include "media.h"
 #include "synth.h"
 #include "tts.h"
 
@@ -145,21 +146,24 @@ void EnsureWorker() {
   }
 }
 
+// Adds speech (when `speech_on`) and the shared app audio in `media` to the
+// mic buffer; "Keep My Microphone On" off leaves only those.
 template <typename T>
-void MixSamples(T* out, int frames, int channels, Engine& e, const Config& cfg,
-                double ratio, float (*to_float)(T), T (*from_float)(float)) {
+void MixSamples(T* out, int frames, int channels, Engine& e, const Config& cfg, bool speech_on,
+                const float* media, double ratio, float (*to_float)(T), T (*from_float)(float)) {
   std::lock_guard<std::mutex> lock(e.mic.mutex);
   const float vc = static_cast<float>(cfg.vc_volume);
+  const float media_gain = static_cast<float>(cfg.media_volume);
   const bool keep_mic = cfg.mix_real_mic;
   for (int f = 0; f < frames; ++f) {
-    float speech = 0.0f;
+    float speech = media != nullptr ? media[f] * media_gain : 0.0f;
     auto& q = e.mic.samples;
-    if (!q.empty()) {
+    if (speech_on && !q.empty()) {
       const size_t i = static_cast<size_t>(e.mic.position);
       const double frac = e.mic.position - i;
       const float a = i < q.size() ? q[i] : 0.0f;
       const float b = i + 1 < q.size() ? q[i + 1] : 0.0f;
-      speech = static_cast<float>(a + (b - a) * frac) * vc;
+      speech += static_cast<float>(a + (b - a) * frac) * vc;
       e.mic.position += ratio;
       const size_t consumed = static_cast<size_t>(e.mic.position);
       const size_t drop = std::min(consumed, q.size());
@@ -211,29 +215,38 @@ void MixIntoMic(void* data, int bytes, const SDL_AudioSpec& spec) {
   e.last_mic_read_ms = NowMs();
   EnsureWorker();
   const Config cfg = GetConfig();
-  if (!cfg.enabled || !cfg.uses_vc() || data == nullptr || bytes <= 0 || spec.channels <= 0 ||
-      spec.freq <= 0) {
+  const bool speech_on = cfg.enabled && cfg.uses_vc();
+  if ((!speech_on && !cfg.media_on) || data == nullptr || bytes <= 0 || spec.channels <= 0 || spec.freq <= 0) {
     return;
   }
   const double ratio = static_cast<double>(kSampleRate) / spec.freq;
   const int channels = spec.channels;
+  const int bytes_per_sample = spec.format == SDL_AUDIO_S16 ? 2 : 4;
+  // The shared app audio for this buffer, resampled to the mic's rate.
+  static thread_local std::vector<float> media;
+  const float* shared = nullptr;
+  if (cfg.media_on) {
+    media.assign(bytes / (bytes_per_sample * channels), 0.0f);
+    media::MixInto(media.data(), static_cast<int>(media.size()), spec.freq);
+    shared = media.data();
+  }
   switch (spec.format) {
     case SDL_AUDIO_F32: {
       const int frames = bytes / (4 * channels);
-      MixSamples<float>(static_cast<float*>(data), frames, channels, e, cfg, ratio,
+      MixSamples<float>(static_cast<float*>(data), frames, channels, e, cfg, speech_on, shared, ratio,
                         [](float v) { return v; }, [](float v) { return v; });
       break;
     }
     case SDL_AUDIO_S16: {
       const int frames = bytes / (2 * channels);
-      MixSamples<int16_t>(static_cast<int16_t*>(data), frames, channels, e, cfg, ratio,
+      MixSamples<int16_t>(static_cast<int16_t*>(data), frames, channels, e, cfg, speech_on, shared, ratio,
                           [](int16_t v) { return v / 32768.0f; },
                           [](float v) { return static_cast<int16_t>(v * 32767.0f); });
       break;
     }
     case SDL_AUDIO_S32: {
       const int frames = bytes / (4 * channels);
-      MixSamples<int32_t>(static_cast<int32_t*>(data), frames, channels, e, cfg, ratio,
+      MixSamples<int32_t>(static_cast<int32_t*>(data), frames, channels, e, cfg, speech_on, shared, ratio,
                           [](int32_t v) { return v / 2147483648.0f; },
                           [](float v) { return static_cast<int32_t>(v * 2147483520.0f); });
       break;

@@ -2,8 +2,8 @@
 // or Animalese) and plays them: into Nightcap's own microphone stream (so Roblox
 // voice chat hears it) and/or on your speakers.
 
-#ifndef VOX_TTS_SPEECH_H_
-#define VOX_TTS_SPEECH_H_
+#ifndef VOX_MENU_SPEECH_H_
+#define VOX_MENU_SPEECH_H_
 
 #include <SDL3/SDL.h>
 
@@ -26,4 +26,4 @@ std::string LastMessage();
 
 }  // namespace nac
 
-#endif  // VOX_TTS_SPEECH_H_
+#endif  // VOX_MENU_SPEECH_H_
