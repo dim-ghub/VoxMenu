@@ -1,46 +1,61 @@
 <p align="center">
-  <img src="assets/vox-tts.svg" width="140" alt="Vox TTS Logo">
+  <img src="assets/vox-menu.svg" width="140" alt="Vox Menu Logo">
 </p>
 
-<h1 align="center">Vox TTS</h1>
+<h1 align="center">Vox Menu</h1>
 
-Every chat message you send in Roblox (through [Nightcap](https://github.com/CoderDayton/nightcap))
-is synthesized into voice chat using fast, local Text-to-Speech (TTS). You can also
-hear it on your own speakers. Settings live in an in-game menu styled like
-Roblox's own.
+An in-game menu for Roblox on Linux through [Nightcap](https://github.com/CoderDayton/nightcap): local
+text-to-speech into voice chat, movable HUD overlays (FPS, ping, server location, keystrokes),
+an autoclicker and macros, and rejoin / server hop / FPS cap controls. Styled like Roblox's own menu.
 
-Vox TTS (formerly Nightcap AC) is one library, `libvox_tts.so`, loaded into an unmodified
-Nightcap. It requires no virtual audio cables, no virtual microphone, and no separate app.
+Vox Menu (formerly Vox TTS and Nightcap AC) is one library, `libvox_menu.so`, loaded into an
+unmodified Nightcap. It needs no virtual audio cables, virtual microphone or separate app.
 
 <p align="center">
-  <img src="docs/images/vox-tts-piper.png" alt="Vox TTS In-Game Menu" width="800">
+  <img src="docs/images/vox-menu-game.png" alt="Vox Menu's Game tab" width="800">
 </p>
 
 ## Features
 
-* **Local Text-to-Speech Engines:**
-  * **Piper TTS (Neural AI):** High-quality, natural offline AI voices (Lessac, Amy, Ryan, etc.) running locally with ONNX models. Fast, low latency, and realistic.
-  * **eSpeak-NG (Retro / Lightweight):** Fast, classic synthesized speech with support for many accents and languages (US English, British, Scottish, Spanish, French, German, Japanese, etc.), pitch, and WPM speed adjustments.
-  * **Animal Crossing (Animalese):** Turn your chat into authentic Animal Crossing villager voices!
-    * Choose between English and Korean authentic sound banks.
-    * Select villager personalities (Female 1–4, Male 1–4: Normal, Peppy, Snooty, Sisterly, Lazy, Jock, Smug, Cranky).
-    * Load custom letter sound packs (`a.wav`...`z.wav`).
-* **In-Game Roblox Overlay:**
-  * Press **F8** (or click the top bar button) to open the 3-tab in-game menu: **TTS**, **Output**, and **Settings**.
-  * Styled after Roblox's own settings menu, using Roblox's own Builder Sans font and BuilderIcons.
-* **Audio Routing:**
-  * Play voice directly into voice chat, to your speakers only, or both.
-  * Adjust voice chat volume and local speaker volume independently.
-  * Optional "Keep My Microphone On" to mix synthetic speech over your real voice.
+* **Text-to-speech in voice chat:** every chat message you send is spoken into Roblox voice chat
+  with a local engine: Piper (neural), eSpeak-NG, or Animal Crossing's Animalese. You can hear it
+  on your speakers too, or speak through TTS without sending the text at all (Intercept Chat).
+* **Share an app's sound in voice chat:** play music or a video from any app (Spotify, a browser,
+  mpv...) into the mic, mixed with your voice or instead of it. Recorded straight from that app's
+  stream: no virtual cables or devices, and Roblox's own audio is never sent back.
+* **HUD overlays:** FPS (with frame time), ping, server location and a keystrokes display
+  (W A S D, Space, mouse buttons with clicks per second). Drag them anywhere and resize them in the
+  layout editor, with snapping to the screen edges, its centre and each other. They look like
+  Roblox's own top-bar buttons (44 px pills, its colors). Drop one right beside another and they
+  join into one pill, like its menu / chat / mic group, and stay joined as the numbers change.
+* **Autoclicker:** a floating window that stays on screen while you play. Click where the mouse is
+  or at fixed points you place on the screen (clicked in turn), left/right/middle, single/double/hold,
+  1 to 100 clicks per second, random timing and position, a click or time limit, and a start delay.
+  Clicks go only to the Roblox window, and can leave your real cursor where it is.
+* **Macros:** record your keys, clicks, typed text and (optionally) mouse movement, edit the steps,
+  and play them back once, a number of times or on a loop, at any speed. Saved as plain-text files.
+* **Rejoin and server hop:** rejoin the last server (even after a disconnect), hop to another
+  server of the same game (any, the emptiest, or the best ping), or copy an invite link to the
+  server you're in. Nightcap leaves and joins in place; nothing restarts.
+* **FPS cap:** cap the frame rate at any number, with a separate (lower) cap while Roblox isn't
+  focused. Changes apply instantly.
+
+* **In VR:** the menu opens as a panel in front of you (hold the left thumbstick click), and the
+  FPS / ping / server stats can sit low in your view. Everything but keystrokes and automation
+  works from the headset.
+
+All of it is in the in-game menu: press **F8** or click the top-bar button.
 
 ## Requirements
 
 * Nightcap on Linux, native install (`mocktail` on your PATH). Flatpak is best-effort.
 * Nightcap's Vulkan renderer (the default), not OpenGL.
-* Local TTS engines:
-  * `espeak-ng` (commonly installed on most Linux distributions)
-  * `piper` (optional, for neural AI voices)
-* To build: C++17 compiler, SDL3, and Vulkan headers (`sdl3`, `vulkan-headers` on Arch/Artix).
+* For TTS: `espeak-ng` (most distributions have it) and optionally `piper` for neural voices.
+* For server hop: `curl` (or Python 3) to read Roblox's server list.
+* For sharing app audio: `pactl` and `parec` (`libpulse` / `pulseaudio-utils`), with PulseAudio or
+  PipeWire's PulseAudio layer (`pipewire-pulse`).
+* To build: a C++17 compiler, SDL3, Vulkan and OpenXR headers (`sdl3`, `vulkan-headers`, `openxr`
+  on Arch/Artix).
 
 ## Install
 
@@ -51,54 +66,52 @@ make build
 make install          # into ~/.local (PREFIX=... to change)
 ```
 
-`make install` installs:
-* `vox-tts` (and backwards-compatible `nightcap-ac` alias)
-* `libvox_tts.so` (and `libnightcap_ac.so` symlink)
-* `vox-tts-download-voice` helper script
-* Desktop launcher entries and Vulkan layer manifests
+`make install` installs the `vox-menu` launcher and `libvox_menu.so`, the
+`vox-menu-download-voice` helper, a desktop entry, and the Vulkan layer manifest. The old
+`vox-tts` and `nightcap-ac` commands keep working as aliases.
 
-It will then prompt:
+It then asks:
 ```
 Patch it? [y/N]
 ```
-Answering **y** updates Nightcap's launcher entry so normal launches and `roblox://` links (joining games from the website) launch with Vox TTS automatically.
+Answering **y** updates Nightcap's launcher entry so normal launches and `roblox://` links
+(joining games from the website) start Nightcap with Vox Menu. A launcher patched by Vox TTS or
+Nightcap AC is updated without asking.
 
-To remove or undo anytime:
+To undo:
 ```bash
-make unpatch-desktop    # restore previous desktop entry
-make uninstall          # remove all installed files
+make unpatch-desktop    # restore the previous launcher entry
+make uninstall          # remove everything installed
 ```
 
 ## Downloading Neural Piper Voices
 
-Vox TTS includes a helper script to download Piper neural voice models directly from Hugging Face into `~/.local/share/piper-voices`:
+Vox Menu includes a helper script to download Piper neural voice models directly from Hugging Face into `~/.local/share/piper-voices`:
 
 ```bash
 # Download default voice (en_US-lessac-medium)
-vox-tts-download-voice
+vox-menu-download-voice
 
 # Or download other voices:
-vox-tts-download-voice en_US-amy-medium
-vox-tts-download-voice en_US-ryan-medium
+vox-menu-download-voice en_US-amy-medium
+vox-menu-download-voice en_US-ryan-medium
 ```
 
 Any `.onnx` models placed in `~/.local/share/piper-voices` (or configured via a custom directory in Settings) appear in the in-game model picker.
 
-## In-Game Controls & Menu
+## In-Game Menu
 
 Press **F8** or click the top-bar button to open the menu.
 
-### Navigation
-
 | Key | Action |
 | --- | --- |
-| Tab / Shift+Tab, ↑ / ↓ | Select next / previous option |
-| ← / → | Adjust value or switch option |
-| Enter / Space | Toggle or activate setting |
-| Q / E | Switch between menu tabs |
-| Esc or F8 | Close menu |
+| Tab / Shift+Tab, ↑ / ↓ | Select the next / previous option |
+| ← / → | Change the selected option |
+| Enter / Space | Toggle or activate |
+| Q / E | Previous / next tab |
+| Esc or F8 | Close the menu |
 
-### Menu Tabs
+### Tabs
 
 1. **TTS (Text-to-Speech):**
    * **Speak My Chat Messages:** Master toggle for speaking chat.
@@ -114,6 +127,10 @@ Press **F8** or click the top-bar button to open the menu.
 </p>
 
 2. **Output:**
+   * **Share App Audio:** turn on **Share an App's Sound**, pick the **App** (any app playing sound,
+     or *All Other Apps*), and set its **Volume**. It is sent while you're unmuted in voice chat;
+     **Keep My Microphone On** off sends only the app (and TTS), not your voice. Use headphones,
+     or your mic will pick the app up from your speakers too.
    * **Play Voice In:** Voice Chat, Voice Chat + Me, or Only Me.
    * **Voice Chat / Local Volume:** Independent sliders.
    * **Keep Microphone On:** Allow speaking through real mic alongside synthetic speech.
@@ -123,41 +140,146 @@ Press **F8** or click the top-bar button to open the menu.
   <img src="docs/images/vox-tts-output.png" alt="Audio Output Settings" width="750">
 </p>
 
-3. **Settings:**
-   * **Intercept Chat:** Speak messages via TTS instead of sending them to Roblox text chat.
-   * **Skip Chat Commands:** Automatically ignore commands starting with `/` (e.g. `/e dance`).
-   * **Menu Button Position:** Top Left, Top Right, or Hidden.
-   * **Custom Piper Voices Folder:** Additional directory to scan for `.onnx` models.
-   * **About:** Version info and status of the last message spoken.
+3. **Game:**
+   * **Rejoin:** join the last server again, also after a disconnect or a kick.
+   * **Server Hop:** another server of the same game. Servers you joined in the last
+     10 minutes are skipped. **Hop To** picks any server, the one with the fewest players, or
+     the one with the best ping.
+   * **Invite Link:** copies a `roblox.com` link friends can open to join your server.
+   * **FPS Cap** (presets, or type any number into **Exact FPS Cap**), and a separate cap
+     **When Roblox Isn't Focused**.
+
+4. **HUD:**
+   * Turn on the **FPS Counter** (optionally with frame time), **Ping**, **Server Location**
+     (optionally with the address) and **Keystrokes** (Space bar, mouse buttons and clicks per
+     second optional).
+   * **Edit Layout** hides the menu and lets you drag the overlays anywhere. Drag the corner
+     handle or scroll to resize, right-click to hide one, and hold Shift to move without snapping.
+     Drag an overlay up beside another: near it, it locks into place and the two show as one
+     blue-outlined pill; drop it there to join them. Drag it out again to separate them. Esc or Done goes back to the menu.
+   * **Match Roblox's Look** (on by default): overlays are solid like Roblox's top-bar buttons,
+     and the automation window is as see-through as Roblox's menu (following its *Background
+     Transparency* setting). Turn it off to set your own **Background** opacity. Also
+     **Pressed Keys** (white or blue), **Snapping** and **Reset Positions**.
 
 <p align="center">
-  <img src="docs/images/vox-tts-settings.png" alt="Overlay and Directory Settings" width="750">
+  <img src="docs/images/vox-menu-hud.png" alt="HUD overlays, click points and the automation window" width="750">
 </p>
 
-## Configuration & Migration
+5. **Automation:**
+   * **Automation Window:** shows the floating autoclicker and macros window (below).
+   * **Pause While This Menu Is Open:** no clicks or macro keys reach the game behind the menu.
+   * **Hotkeys:** autoclicker on/off (**F6**), play/stop macro (**F7**), record macro (**F9**).
+     Each can be F1 to F12 (except F8), Insert, Home, End, Page Up/Down, Pause, or none.
 
-Settings are stored at:
-`~/.config/vox-tts/config.json`
+6. **Settings:**
+   * **Intercept Chat:** speak messages through TTS instead of sending them to Roblox's chat.
+   * **Skip Chat Commands:** don't speak messages starting with `/` (e.g. `/e dance`).
+   * **Menu Button:** top left, top right, or hidden.
+   * **Custom Voices Folder:** another directory to scan for Piper `.onnx` models.
 
-If an existing configuration from `~/.config/nightcap-ac/config.json` is detected, it is automatically migrated on first run while preserving all your existing settings.
+### In VR
+
+When Nightcap shows the game in a headset, Vox Menu is there too, without going back to the desktop:
+
+* **Open the menu:** hold the **left thumbstick click** for half a second (or the right one; see
+  *Open in VR* in Settings). The panel opens in front of you, facing you; hold the click again or
+  press **Close** to put it away.
+* **Use it:** point a controller at the panel (a blue dot shows where) and pull the **trigger** to
+  click; push the thumbstick up or down to scroll. While it is open, the game doesn't get your
+  buttons or sticks, like the desktop menu keeps the mouse and keyboard.
+* **What's there:** the TTS, Output, Game, HUD and Settings tabs. Text fields show their value but
+  are edited on the desktop (there's no keyboard in the panel); Test Voice plays the saved test
+  message. The autoclicker, macros, keystrokes and the layout editor are desktop-only.
+* **Stats in view:** the FPS, ping and server overlays you have on show as one pill low on the left
+  of your view (HUD tab, *Show These Stats*). FPS counts the headset's frames.
+* **The FPS cap is off in VR,** so it can never hold the headset back.
+
+This needs Nightcap's Vulkan graphics (`direct-vulkan`, its default); with OpenGL the game still
+runs, without the panel.
+
+### The Automation Window
+
+A window of its own that stays on screen while the menu is closed, so you can start and stop
+things while playing. It takes the mouse only where it is drawn (and only while your cursor is
+free, not in first-person mouse lock); everywhere else your clicks reach the game as usual. Drag
+it by its title bar; it snaps to the screen edges.
+
+**Autoclicker tab**
+
+* **Start / Stop** (or the hotkey). A badge at the top of the screen shows it's running.
+* **Button**, **Click Type** (single, double, hold down), **Speed** and **Press Length**.
+* **Where to Click:** *Follow Mouse*, or *Fixed Points*: **+ Add Point**, then click where it
+  should go. Points show on screen as numbered markers you can drag, or right-click to remove.
+  **Move Real Cursor** moves your cursor to each point; off, the game is sent the click at the point
+  and your cursor stays where it is.
+* **Randomize, Limits and Delay:** timing jitter, position spread, stop after a time or a number
+  of clicks, and a countdown before starting.
+
+**Macros tab**
+
+* **Record** (or **F9**), play in the game, then stop. Your keys, clicks and typed text are
+  recorded with their timing, and mouse movement too when **Record Mouse Movement** is on.
+* **Play** (or **F7**) with a **Repeat** count (0 loops until stopped) and a **Speed**.
+* Edit the steps: select one to change it (key, mouse button and point, wait time, text), move it
+  up or down, delete it, or add key presses, clicks, waits and text.
+* **Save** under a name, and load or delete saved macros. They're plain text in
+  `~/.config/vox-menu/macros/`, one step per line (`key_down W`, `wait 120`,
+  `click left 0.5 0.5`, `text gg`), so you can write them by hand too.
+
+**Stop Everything** stops the autoclicker, recording and playback, and releases any key or button
+they were holding.
+
+## How It Connects to Nightcap
+
+Vox Menu runs inside Nightcap and uses Nightcap's own host interfaces where they exist. It doesn't
+touch Roblox's engine or game scripts:
+
+* **Server info** comes from Roblox's log lines, delivered as they're logged through Nightcap's
+  log observer (falling back to reading Nightcap's session log).
+* **Ping** is timed from the game's own network packets through Nightcap's packet observer, the
+  way Nightcap's server-info overlay measures it (falling back to ICMP).
+* **Rejoin and server hop** hand the server to Nightcap's launch broker, which leaves the current
+  game and joins the new one in place, just like clicking Join on the website.
+* **Shared app audio** is recorded from that app's own playback stream (`parec --monitor-stream`)
+  and mixed into what Nightcap reads from the microphone, like the TTS voice.
+* **The look** copies Roblox's top bar: 44 px circles and pills 8 px apart, filled `#121215`, white
+  icons and bold Builder Sans, `#0199ED` for anything active. The window's **transparency** comes
+  from Roblox's saved settings (`PreferredTransparency` in
+  `GlobalBasicSettings_13.xml`), so it updates when Roblox saves them.
+* **Clicks, keys and macros** go into Nightcap's event queue, so they only ever reach the Roblox
+  window.
+
+See [Architecture & Internals](docs/architecture.md) for the details.
+
+## Configuration
+
+Settings are stored in `~/.config/vox-menu/config.json`. Settings from Vox TTS
+(`~/.config/vox-tts/`) or Nightcap AC (`~/.config/nightcap-ac/`) are picked up automatically
+the first time.
 
 ## Documentation
 
-Detailed documentation is available in the [`docs/`](docs/) directory:
-
-* [Architecture & Internals](docs/architecture.md): How SDL3 hooking, keystroke tracking, microphone injection, and Vulkan overlay rendering work under the hood.
-* [Speech Engines Guide](docs/engines.md): Guide to Piper neural models, eSpeak-NG accents, and the custom Animalese speech synthesizer.
-* [Configuration Reference](docs/configuration.md): Complete schema documentation for `config.json`, audio routing modes, and migration details.
-* [Development & Testing Guide](docs/development.md): Build targets, test harness structure, and debugging environment variables.
+* [Architecture & Internals](docs/architecture.md): SDL3 hooks, the Vulkan overlay, the
+  automation engine, and the Nightcap integration.
+* [Speech Engines Guide](docs/engines.md): Piper models, eSpeak-NG voices, and Animalese.
+* [Configuration Reference](docs/configuration.md): every `config.json` setting.
+* [Development & Testing Guide](docs/development.md): build targets, tests and debugging.
 
 ## Development & Testing
 
 ```bash
-make build   # builds library and render tool
-make test    # runs unit and integration tests
+make build   # the library and render tool
+make test    # unit and integration tests
 ```
 
-Tests use stand-ins for Nightcap (`vk_driver`, `mic_driver`) to test Vulkan overlay rendering, input events, mic mixing, audio formats, and engine execution.
+Tests use stand-ins for Nightcap (`vk_driver`, `mic_driver`, and a fake launch broker) to check
+the overlay, input routing, the autoclicker and macros, mic mixing and the speech engines.
+
+## Credits
+
+The rejoin, server hop and FPS cap features come from Cocktail. The packet-timing ping estimate
+is adapted from Nightcap (Apache-2.0).
 
 ## License
 

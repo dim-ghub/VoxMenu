@@ -1,10 +1,10 @@
 # Configuration Reference
 
-Vox TTS stores user preferences in a standard JSON format under the user's XDG configuration directory:
+Vox Menu stores user preferences in a standard JSON format under the user's XDG configuration directory:
 
 ```
-$XDG_CONFIG_HOME/vox-tts/config.json
-(typically ~/.config/vox-tts/config.json)
+$XDG_CONFIG_HOME/vox-menu/config.json
+(typically ~/.config/vox-menu/config.json)
 ```
 
 Settings can be changed dynamically using the in-game overlay menu (press **F8** or click the top-bar button) or edited by modifying the JSON file directly.
@@ -13,7 +13,8 @@ Settings can be changed dynamically using the in-game overlay menu (press **F8**
 
 ## Configuration Schema
 
-Below is an example configuration file with default values:
+Below are the text-to-speech settings with their default values; the HUD, game and automation
+settings follow in the tables further down. Settings missing from the file keep their defaults.
 
 ```json
 {
@@ -99,10 +100,111 @@ Below is an example configuration file with default values:
 | --- | --- | --- | --- |
 | `vc_volume` | float | `0.9` | Volume gain applied when injecting audio into voice chat ($0.0$ to $1.5$). |
 | `local_volume` | float | `0.7` | Volume gain applied to local speaker playback ($0.0$ to $1.5$). |
+| `media_on` | boolean | `false` | Share an app's sound into voice chat. |
+| `media_source` | string | `""` | The app to share, by its `application.name` (as `pactl list sink-inputs` shows it), or `"*"` for every app except Nightcap. |
+| `media_volume` | float | `0.6` | Volume of the shared audio ($0.0$ to $1.5$). |
 | `mix_real_mic` | boolean | `true` | If `true`, your physical microphone input is blended with the TTS speech. If `false`, physical microphone input is silenced while synthetic speech is playing. |
+
+---
+
+### Game: Frame Rate and Servers
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fps_cap` | float | `0` | Frame-rate cap; `0` is unlimited. Any value up to `1000`; type it in the menu's Exact FPS Cap field. |
+| `fps_cap_background` | float | `0` | Cap while the Roblox window isn't focused; `0` keeps `fps_cap`. |
+| `hop_mode` | string | `"random"` | Which server a hop picks: `"random"`, `"smallest"` (fewest players) or `"ping"` (best reported ping). |
+
+---
+
+### HUD Overlays
+
+Each overlay has five settings, `<name>_on`, `<name>_x`, `<name>_y`, `<name>_scale` and
+`<name>_attach`, for
+`hud_fps`, `hud_ping`, `hud_server` and `hud_keys`. `x` and `y` run from `0` (against the left /
+top edge) to `1` (against the right / bottom edge), with `0.5` centred, so an overlay stays
+lined up with the edge it is near as its text changes width. `scale` runs from `0.5` to `3`.
+`attach` (`"fps"`, `"ping"` or `"server"`, or `""`) joins the overlay onto the right end of that
+one, in one pill; its own `x` and `y` then don't apply.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `hud_fps_on`, `hud_ping_on`, `hud_server_on`, `hud_keys_on` | boolean | `false` | Which overlays are shown. |
+| `hud_frametime` | boolean | `false` | FPS overlay also shows milliseconds per frame. |
+| `hud_server_ip` | boolean | `false` | Server overlay also shows the server's address. |
+| `hud_keys_space` | boolean | `true` | Keystrokes overlay shows the Space bar. |
+| `hud_keys_mouse` | boolean | `true` | Keystrokes overlay shows the mouse buttons. |
+| `hud_keys_cps` | boolean | `true` | Clicks per second under the mouse buttons. |
+| `hud_match_roblox` | boolean | `true` | Overlays are solid like Roblox's top-bar buttons, and the automation window follows Roblox's Background Transparency setting (`PreferredTransparency`): `0.82` opaque normally, solid at `0`. |
+| `hud_keys_pressed` | string | `"white"` | How a held key looks in the keystrokes overlay: `"white"` (white with a dark letter) or `"blue"`. |
+| `hud_background` | float | `0.55` | Overlay and window background opacity (`0` to `1`) when not matching Roblox. |
+| `hud_snap` | boolean | `true` | Snap while dragging in the layout editor (and join pills dropped beside each other). |
+| `hud_joins_adopted` | boolean | `false` | Set after the one-time step that joins pills an older version showed side by side. |
+
+---
+
+### Autoclicker
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `click_button` | string | `"left"` | `"left"`, `"right"` or `"middle"`. |
+| `click_type` | string | `"single"` | `"single"`, `"double"`, or `"hold"` (press and keep it down). |
+| `click_target` | string | `"mouse"` | `"mouse"` (wherever the cursor is) or `"points"` (the points below, in turn). |
+| `click_points` | string | `""` | `"x,y;x,y"`, as fractions of the window. |
+| `click_cps` | float | `10` | Clicks per second (`0.1` to `200`). |
+| `click_hold_ms` | float | `20` | How long each press lasts; never more than 60% of the gap between clicks. |
+| `click_jitter` | float | `0` | Random timing, in percent of the interval (`0` to `90`). |
+| `click_spread` | float | `0` | Random offset around a point, in pixels. |
+| `click_duration` | float | `0` | Stop after this many seconds; `0` never stops. |
+| `click_limit` | float | `0` | Stop after this many clicks; `0` has no limit. |
+| `click_delay` | float | `0` | Countdown in seconds before clicking starts. |
+| `click_move_cursor` | boolean | `false` | Move the real cursor to each point; otherwise only the game sees the click there. |
+
+---
+
+### VR
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `vr_stats` | string | `"view"` | In a headset, the FPS / ping / server overlays that are on show as one pill low in view (`"view"`), or not (`"off"`). |
+| `vr_toggle` | string | `"left_stick"` | The thumbstick click to hold (half a second) to open or close the panel in VR: `"left_stick"` or `"right_stick"`. |
+
+---
+
+### Macros, Automation Window and Hotkeys
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `macro_name` | string | `""` | The saved macro loaded at start (`~/.config/vox-menu/macros/<name>.macro`). |
+| `macro_repeat` | float | `1` | Times to play it; `0` loops until stopped. |
+| `macro_speed` | float | `1` | Playback speed multiplier (`0.25` to `4` in the window, `0.1` to `10` by hand). |
+| `macro_record_moves` | boolean | `false` | Record mouse movement too, not just clicks. |
+| `tools_open` | boolean | `false` | Show the floating automation window. |
+| `tools_x`, `tools_y` | float | `0.706`, `0.094` | Where the window's top-left corner is, as fractions of the screen. |
+| `pause_in_menu` | boolean | `true` | No clicks or macro input while the menu is open. |
+| `key_clicker` | string | `"F6"` | Autoclicker on/off. An SDL key name, or `"off"`. |
+| `key_macro` | string | `"F7"` | Play / stop the macro. |
+| `key_record` | string | `"F9"` | Start / stop recording. |
+
+### Macro files
+
+One step per line; `#` starts a comment. Points are fractions of the window; leave them out to
+use wherever the cursor is.
+
+```
+key_down W            # hold a key (SDL key names: W, Space, Left Shift, Return, F5 ...)
+wait 500              # milliseconds
+key_up W
+key E                 # press and release
+click left 0.5 0.5    # mouse_down / mouse_up work the same way
+move 0.25 0.75
+text gg               # typed text, e.g. into the open chat box
+```
 
 ---
 
 ## Automatic Migration
 
-If you previously used **Nightcap AC**, your configuration at `~/.config/nightcap-ac/config.json` is automatically detected and migrated to `~/.config/vox-tts/config.json` on the first launch. All voice, personality, volume, and style preferences are seamlessly preserved.
+Settings from **Vox TTS** (`~/.config/vox-tts/config.json`) or **Nightcap AC**
+(`~/.config/nightcap-ac/config.json`) are picked up and saved to `~/.config/vox-menu/config.json`
+on the first launch.

@@ -1,15 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <title>Vox TTS</title>
-  <!-- Chat bubble: outer shape with its tail, and the lighter face -->
-  <path d="M140 80H372A100 100 0 0 1 472 180V300A100 100 0 0 1 372 400H220L132 462Q118 472 118 456V398A100 100 0 0 1 40 300V180A100 100 0 0 1 140 80Z" fill="#1B2A6B"/>
-  <path d="M146 116H366A70 70 0 0 1 436 186V294A70 70 0 0 1 366 364H146A70 70 0 0 1 76 294V186A70 70 0 0 1 146 116Z" fill="#4C6FFF"/>
-  <!-- Voice waveform -->
-  <g fill="#FFFFFF">
-    <rect x="133" y="214" width="26" height="52" rx="13"/>
-    <rect x="177" y="185" width="26" height="110" rx="13"/>
-    <rect x="221" y="155" width="26" height="170" rx="13"/>
-    <rect x="265" y="185" width="26" height="110" rx="13"/>
-    <rect x="309" y="170" width="26" height="140" rx="13"/>
-    <rect x="353" y="208" width="26" height="64" rx="13"/>
+  <title>Vox Menu</title>
+  <!-- A rounded tile in Roblox's top-bar black -->
+  <rect width="512" height="512" rx="112" fill="#121215"/>
+  <!-- The mark, on a 24-unit grid scaled 14x: a rounded V with a dot over it -->
+  <g transform="translate(88 83) scale(14)">
+    <path d="M5 7.5 L12 19.5 L19 7.5" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="12" cy="5.2" r="2.1" fill="#0199ED"/>
   </g>
 </svg>

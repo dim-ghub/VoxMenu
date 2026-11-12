@@ -1,12 +1,12 @@
-# Vox TTS Documentation
+# Vox Menu Documentation
 
-Welcome to the Vox TTS documentation. Here you will find comprehensive guides on the architecture, text-to-speech engines, configuration options, and development workflows.
+Welcome to the Vox Menu documentation. Here you will find comprehensive guides on the architecture, text-to-speech engines, configuration options, and development workflows.
 
 ## Documentation Index
 
 - [Architecture & Internals](architecture.md)
-  - Understand how Vox TTS integrates into Nightcap without virtual audio cables or separate companion apps.
-  - Details on SDL3 function wrapping, keystroke reconstruction, microphone stream injection, and the Vulkan overlay layer.
+  - How Vox Menu runs inside Nightcap without virtual audio cables or companion apps.
+  - SDL3 function wrapping, keystroke reconstruction, microphone injection, the Vulkan overlay, the HUD and automation, and the Nightcap host integration (log and packet observers, launch broker).
 
 - [Speech Engines Guide](engines.md)
   - Detailed overview of the three supported local speech engines:
@@ -16,9 +16,9 @@ Welcome to the Vox TTS documentation. Here you will find comprehensive guides on
   - Instructions on downloading and managing custom voices and letter sound packs.
 
 - [Configuration Reference](configuration.md)
-  - Complete reference for `config.json`, including all options, valid ranges, and defaults.
+  - Every `config.json` setting (TTS, HUD, game, autoclicker, macros, hotkeys) and the macro file format.
   - Audio routing mechanics, volume control, and microphone mixing.
-  - Backward compatibility and automatic migration from `nightcap-ac`.
+  - Automatic migration from `vox-tts` and `nightcap-ac`.
 
 - [Development & Testing Guide](development.md)
   - Prerequisites and build instructions.

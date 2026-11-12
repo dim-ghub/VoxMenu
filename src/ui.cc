@@ -13,10 +13,16 @@
 #include <string>
 
 #include "app.h"
+#include "automation.h"
+#include "framecap.h"
 #include "gamestate.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "media.h"
+#include "roblox_settings.h"
+#include "servers.h"
 #include "icons.h"
+#include "ui_internal.h"
 #include "speech.h"
 #include "synth.h"
 #include "tts.h"
@@ -29,10 +35,9 @@
 // for the keyboard/gamepad selection.
 
 namespace nac::ui {
-namespace {
 
 // --------------------------------------------------------------------------
-// Scale, colour, animation
+// Scale, colour, animation (shared with hud.cc through ui_internal.h)
 
 float g_px = 1.0f;     // swapchain pixels per logical unit
 bool g_srgb = false;   // target stores linear values
@@ -46,17 +51,28 @@ float Linear(int v) {
   return x <= 0.04045f ? x / 12.92f : std::pow((x + 0.055f) / 1.055f, 2.4f);
 }
 
-ImU32 C(int r, int g, int b, float a = 1.0f) {
+ImU32 C(int r, int g, int b, float a) {
   return ImGui::ColorConvertFloat4ToU32(ImVec4(Linear(r), Linear(g), Linear(b), a * g_alpha));
 }
 
-ImVec4 C4(int r, int g, int b, float a = 1.0f) {
+ImVec4 C4(int r, int g, int b, float a) {
   return ImVec4(Linear(r), Linear(g), Linear(b), a * g_alpha);
 }
 
-ImU32 White(float a = 1.0f) { return C(255, 255, 255, a); }
+ImU32 White(float a) { return C(255, 255, 255, a); }
 ImU32 Muted() { return C(178, 179, 181); }         // inactive tabs, subtitles
-ImU32 Panel() { return C(0, 0, 0, 0.82f); }         // see-through black
+ImU32 Panel() { return C(0, 0, 0, MenuOpacity()); }  // see-through black
+// Roblox scales its backgrounds' transparency by PreferredTransparency.
+float MenuOpacity() { return 1.0f - 0.18f * RobloxPreferredTransparency(); }
+
+float OverlayOpacity(const Config& cfg) {
+  return cfg.hud_match_roblox ? 1.0f : static_cast<float>(cfg.hud_background);
+}
+
+float WindowOpacity(const Config& cfg) {
+  return cfg.hud_match_roblox ? MenuOpacity() : static_cast<float>(cfg.hud_background);
+}
+
 ImU32 Highlight() { return C(35, 37, 39); }         // hovered / selected row
 ImU32 BlockOn() { return C(217, 217, 217); }
 ImU32 BlockOff() { return C(57, 59, 61); }
@@ -66,25 +82,18 @@ ImU32 Primary() { return C(20, 38, 102); }
 ImU32 PrimaryHover() { return C(29, 52, 136); }
 ImU32 Divider() { return C(255, 255, 255, 0.1f); }
 
+namespace {
 using Clock = std::chrono::steady_clock;
 Clock::time_point g_start = Clock::now();
+}  // namespace
 float Now() { return std::chrono::duration<float>(Clock::now() - g_start).count(); }
 
 // --------------------------------------------------------------------------
 // Fonts
 
-struct Fonts {
-  ImFont* title = nullptr;   // row labels (Medium 18)
-  ImFont* value = nullptr;   // picker values, field text (Regular 18)
-  ImFont* small = nullptr;   // subtitles (Regular 13)
-  ImFont* tiny = nullptr;    // slider end labels (Regular 12.5)
-  ImFont* tab = nullptr;     // tab labels (Medium 20)
-  ImFont* header = nullptr;  // section headers (Bold 25)
-  ImFont* button = nullptr;  // bottom buttons (Bold 18)
-  ImFont* hint = nullptr;    // key hints (Bold 10)
-  float px = 0;
-  std::string family;
-} g_fonts;
+Fonts g_fonts;
+
+namespace {
 
 bool IsFile(const std::string& path) {
   struct stat st {};
@@ -134,6 +143,8 @@ ImFont* AddFont(const std::string& dir, const char* file, float size, const char
   return io.Fonts->AddFontDefault(&cfg);
 }
 
+}  // namespace
+
 // --------------------------------------------------------------------------
 // Drawing helpers
 
@@ -153,6 +164,18 @@ void TextCentered(ImFont* font, ImVec2 center, ImU32 col, const char* text) {
 }
 
 // Outline icons, like Roblox's menu tab icons.
+// Vox Menu's logo: a rounded V with a dot over it, on a 24-unit grid
+// (assets/vox-menu.svg), `size` units across, centred on c.
+void VoxMark(ImDrawList* dl, ImVec2 c, float size, ImU32 ink, ImU32 dot) {
+  const float s = size / 24;
+  auto p = [&](float x, float y) { return ImVec2(c.x + (x - 12) * s, c.y + (y - 12.35f) * s); };
+  const float w = 3 * s;
+  const ImVec2 v[3] = {p(5, 7.5f), p(12, 19.5f), p(19, 7.5f)};
+  dl->AddPolyline(v, 3, ink, 0, w);
+  for (const ImVec2& pt : v) dl->AddCircleFilled(pt, w / 2, ink, 16);  // round caps and joint
+  dl->AddCircleFilled(p(12, 5.2f), 2.1f * s, dot, 20);
+}
+
 void BubbleIcon(ImDrawList* dl, ImVec2 c, float size, ImU32 col, float stroke, bool filled, float dots) {
   const float w = size * 0.92f, h = size * 0.68f;
   const ImVec2 a(c.x - w / 2, c.y - h / 2 - size * 0.08f), b(c.x + w / 2, c.y + h / 2 - size * 0.08f);
@@ -197,6 +220,32 @@ void GearIcon(ImVec2 c, float s, ImU32 col, float stroke) {
   }
   g_dl->PathStroke(col, ImDrawFlags_Closed, stroke);
   g_dl->AddCircle(c, s * 0.14f, col, 20, stroke);
+}
+
+void GaugeIcon(ImVec2 c, float s, ImU32 col, float stroke) {
+  const ImVec2 o(c.x, c.y + s * 0.16f);
+  g_dl->PathArcTo(o, s * 0.46f, 3.14159265f, 2 * 3.14159265f, 24);
+  g_dl->PathStroke(col, 0, stroke);
+  g_dl->AddLine(ImVec2(o.x - s * 0.46f, o.y), ImVec2(o.x + s * 0.46f, o.y), col, stroke);
+  g_dl->AddLine(o, ImVec2(o.x + s * 0.22f, o.y - s * 0.28f), col, stroke);
+  g_dl->AddCircleFilled(o, stroke * 1.4f, col);
+}
+
+void ControllerIcon(ImVec2 c, float s, ImU32 col, float stroke) {
+  const ImVec2 a(c.x - s * 0.48f, c.y - s * 0.26f), b(c.x + s * 0.48f, c.y + s * 0.3f);
+  g_dl->AddRect(a, b, col, s * 0.26f, 0, stroke);
+  g_dl->AddLine(ImVec2(c.x - s * 0.3f, c.y + s * 0.02f), ImVec2(c.x - s * 0.1f, c.y + s * 0.02f), col, stroke);
+  g_dl->AddLine(ImVec2(c.x - s * 0.2f, c.y - s * 0.08f), ImVec2(c.x - s * 0.2f, c.y + s * 0.12f), col, stroke);
+  g_dl->AddCircleFilled(ImVec2(c.x + s * 0.18f, c.y - s * 0.02f), stroke * 1.3f, col);
+  g_dl->AddCircleFilled(ImVec2(c.x + s * 0.3f, c.y + s * 0.1f), stroke * 1.3f, col);
+}
+
+void CursorIcon(ImVec2 c, float s, ImU32 col, float stroke) {
+  const ImVec2 o(c.x - s * 0.24f, c.y - s * 0.42f);
+  const ImVec2 pts[7] = {o, ImVec2(o.x, o.y + s * 0.74f), ImVec2(o.x + s * 0.18f, o.y + s * 0.58f),
+                         ImVec2(o.x + s * 0.32f, o.y + s * 0.86f), ImVec2(o.x + s * 0.44f, o.y + s * 0.8f),
+                         ImVec2(o.x + s * 0.3f, o.y + s * 0.53f), ImVec2(o.x + s * 0.54f, o.y + s * 0.53f)};
+  g_dl->AddPolyline(pts, 7, col, ImDrawFlags_Closed, stroke);
 }
 
 // Roblox's icon font (BuilderIcons), when the payload has it.
@@ -245,6 +294,8 @@ void SelectionOutline(ImVec2 min, ImVec2 max, float rounding) {
   g_dl->AddRect(ImVec2(min.x - g, min.y - g), ImVec2(max.x + g, max.y + g), White(), rounding + g, 0, S(2));
 }
 
+namespace {
+
 // --------------------------------------------------------------------------
 // Keyboard / gamepad-style selection: Tab or ↑/↓ move between items,
 // ←/→ adjust, Enter or Space activates. Clicking hides the outline.
@@ -258,6 +309,8 @@ struct Nav {
 } g_nav;
 
 bool g_editing = false;  // a text field has the keyboard
+bool g_vr = false;      // drawing the headset panel, not the desktop menu
+bool g_vr_close = false;  // the headset panel's Close was pressed
 
 struct NavItem {
   bool focused = false;
@@ -505,6 +558,14 @@ bool TextField(Row& row, const char* id, char* buf, size_t size, const char* pla
   const float h = S(42);
   const ImVec2 min(row.ctrl_l, row.mid - h / 2);
   const float width = row.ctrl_r - row.ctrl_l;
+  if (g_vr) {
+    // No keyboard in the headset: show the value, edit it on the desktop.
+    if (done) *done = false;
+    g_dl->AddRectFilled(min, ImVec2(min.x + width, min.y + h), C(35, 37, 39), S(8));
+    Text(g_fonts.value, ImVec2(min.x + S(15), row.mid - g_fonts.value->FontSize / 2), White(buf[0] ? 0.8f : 0.45f),
+         buf[0] ? buf : placeholder);
+    return false;
+  }
   if (row.nav.activate) ImGui::SetKeyboardFocusHere();
   ImGui::PushFont(g_fonts.value);
   ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g_alpha);
@@ -532,6 +593,20 @@ bool TextField(Row& row, const char* id, char* buf, size_t size, const char* pla
 
 void StatusDot(Row& row, bool on) {
   g_dl->AddCircleFilled(ImVec2(row.ctrl_r - S(8), row.mid), S(6), on ? C(57, 194, 113) : C(110, 112, 118));
+}
+
+// A dark button filling the control column, like the bottom bar's.
+bool ActionButton(Row& row, const char* label, bool primary = false) {
+  const float h = S(40);
+  const ImVec2 a(row.ctrl_l, row.mid - h / 2), b(row.ctrl_r, row.mid + h / 2);
+  bool hovered = false;
+  ImGui::PushID(row.id);
+  const bool clicked = Hit("action", a, b, &hovered) || row.nav.activate;
+  ImGui::PopID();
+  g_dl->AddRectFilled(a, b, primary ? (hovered ? PrimaryHover() : Primary()) : (hovered ? ButtonHover() : C(38, 40, 45)),
+                      S(8));
+  TextCentered(g_fonts.button, ImVec2((a.x + b.x) / 2, (a.y + b.y) / 2), White(), label);
+  return clicked;
 }
 
 // --------------------------------------------------------------------------
@@ -676,7 +751,7 @@ void TTSPage(Config& cfg) {
   }
 
   Header("Try It");
-  row = BeginRow("Test Message", "Press Enter to hear the voice");
+  row = BeginRow("Test Message", g_vr ? "Use Test Voice below to hear it" : "Press Enter to hear the voice");
   if (TextField(row, "##test_tts", g_test, sizeof(g_test), "Type something", nullptr) && g_test[0]) Say(g_test, true);
   EndRow(row);
 }
@@ -701,15 +776,268 @@ void OutputPage(Config& cfg) {
   Slider(row, &cfg.local_volume, 0, 1.5, 0.05, "Quiet", "Loud");
   EndRow(row);
 
-  row = BeginRow("Keep My Microphone On", "Off: voice chat only hears the TTS voice");
+  row = BeginRow("Keep My Microphone On", "Off: voice chat only hears the TTS voice and shared app audio");
   Switch(row, &cfg.mix_real_mic);
   EndRow(row);
+
+  Header("Share App Audio");
+  row = BeginRow("Share an App's Sound", "Play music or a video into voice chat, straight from the app");
+  Switch(row, &cfg.media_on);
+  EndRow(row);
+  // The apps playing sound now; the chosen one stays listed when it stops.
+  std::vector<std::string> apps, app_labels;
+  if (cfg.media_source.empty()) {
+    apps.push_back("");
+    app_labels.push_back("Choose an App");
+  }
+  for (const media::App& a : media::Apps()) {
+    apps.push_back(a.name);
+    app_labels.push_back(a.name);
+  }
+  if (!cfg.media_source.empty() && cfg.media_source != media::kAllApps &&
+      std::find(apps.begin(), apps.end(), cfg.media_source) == apps.end()) {
+    apps.push_back(cfg.media_source);
+    app_labels.push_back(cfg.media_source + " (silent)");
+  }
+  apps.push_back(media::kAllApps);
+  app_labels.push_back("All Other Apps");
+  int source = IndexOf(apps, cfg.media_source);
+  row = BeginRow("App", "Roblox itself is never shared, so voice chat can't echo");
+  Picker(row, app_labels, &source);
+  cfg.media_source = apps[source];
+  EndRow(row);
+
+  std::snprintf(sub, sizeof(sub), "%.0f%%", cfg.media_volume * 100);
+  row = BeginRow("Shared Audio Volume", sub);
+  Slider(row, &cfg.media_volume, 0, 1.5, 0.05, "Quiet", "Loud");
+  EndRow(row);
+  if (cfg.media_on) {
+    const std::string status = media::Status();
+    row = BeginRow("Sharing", status.empty() ? "Starting..." : status.c_str());
+    StatusDot(row, status.rfind("Sharing", 0) == 0);
+    EndRow(row);
+  }
 
   Header("Status");
   const bool mic = MicInUse();
   row = BeginRow("Voice Chat", mic ? "Your mic is open, so speech goes straight into voice chat"
                                    : "Not in voice chat right now. Join a voice server and unmute");
   StatusDot(row, mic);
+  EndRow(row);
+}
+
+bool g_layout = false;  // the layout editor replaces the panel
+
+// A picker over numbers; a value not in the list (set by hand) joins it.
+void NumberPicker(Row& row, double* value, std::vector<double> options, const char* zero_label, const char* unit) {
+  if (std::find(options.begin(), options.end(), *value) == options.end()) {
+    options.push_back(*value);
+    std::sort(options.begin(), options.end());
+  }
+  std::vector<std::string> labels;
+  int idx = 0;
+  for (size_t i = 0; i < options.size(); ++i) {
+    char label[48];
+    if (options[i] == 0) std::snprintf(label, sizeof(label), "%s", zero_label);
+    else std::snprintf(label, sizeof(label), "%g %s", options[i], unit);
+    labels.push_back(label);
+    if (options[i] == *value) idx = static_cast<int>(i);
+  }
+  Picker(row, labels, &idx);
+  *value = options[idx];
+}
+
+char g_fps_cap_text[32] = "";
+bool g_fps_cap_editing = false;
+
+void GamePage(Config& cfg) {
+  Header("This Server", true);
+  const ServerInfo last = LastServer();
+  std::string where = "Not in a game yet";
+  if (!last.job.empty()) {
+    where = std::string(InGame() ? "Place " : "Left place ") + last.place + ", server " + last.job.substr(0, 8);
+  }
+  Row row = BeginRow("Rejoin", ("Join the same server again, even after a disconnect. " + where).c_str());
+  if (ActionButton(row, "Rejoin", true)) servers::Rejoin();
+  EndRow(row);
+
+  row = BeginRow("Server Hop", "Another server of this game, skipping ones you joined in the last 10 minutes");
+  if (ActionButton(row, servers::Busy() ? "Working..." : "Hop") && !servers::Busy()) servers::Hop(cfg.hop_mode);
+  EndRow(row);
+
+  const std::vector<std::string> modes = {"random", "smallest", "ping"};
+  int mode = IndexOf(modes, cfg.hop_mode);
+  row = BeginRow("Hop To", "Which server a hop picks");
+  Picker(row, {"Any Server", "Fewest Players", "Best Ping"}, &mode);
+  cfg.hop_mode = modes[mode];
+  EndRow(row);
+
+  row = BeginRow("Invite Link", "Copy a link friends can open to join this server");
+  if (ActionButton(row, "Copy Link")) servers::CopyInvite();
+  EndRow(row);
+
+  const std::string status = servers::StatusText();
+  if (!status.empty()) {
+    row = BeginRow("Status", status.c_str());
+    StatusDot(row, servers::Busy());
+    EndRow(row);
+  }
+
+  Header("Frame Rate");
+  if (g_vr) {
+    row = BeginRow("FPS Cap", "Off while you play in VR, so it never holds the headset back");
+    EndRow(row);
+    return;
+  }
+  row = BeginRow("FPS Cap", "Limit how fast Roblox draws; changes apply instantly");
+  NumberPicker(row, &cfg.fps_cap, {0, 30, 45, 60, 72, 75, 90, 100, 120, 144, 165, 180, 200, 240, 360}, "Unlimited",
+               "FPS");
+  EndRow(row);
+
+  // Any number at all, typed.
+  if (!g_fps_cap_editing) std::snprintf(g_fps_cap_text, sizeof(g_fps_cap_text), "%g", cfg.fps_cap);
+  row = BeginRow("Exact FPS Cap", "Type any number and press Enter; 0 is unlimited");
+  bool done = false;
+  TextField(row, "##fps_cap", g_fps_cap_text, sizeof(g_fps_cap_text), "Unlimited", &done);
+  g_fps_cap_editing = ImGui::IsItemActive();
+  if (done) {
+    char* end = nullptr;
+    const double typed = std::strtod(g_fps_cap_text, &end);
+    if (end != g_fps_cap_text && typed >= 0) cfg.fps_cap = std::min(typed, 1000.0);
+  }
+  EndRow(row);
+
+  row = BeginRow("When Roblox Isn't Focused", "A lower cap while you're in another window saves power");
+  NumberPicker(row, &cfg.fps_cap_background, {0, 5, 10, 15, 20, 30, 60}, "No Change", "FPS");
+  EndRow(row);
+}
+
+void HudPage(Config& cfg) {
+  Header("Overlays", true);
+  Row row = BeginRow("FPS Counter", "Frames per second the game is drawing");
+  Switch(row, &cfg.hud_fps.on);
+  EndRow(row);
+  if (cfg.hud_fps.on) {
+    row = BeginRow("Show Frame Time", "Milliseconds per frame next to the FPS");
+    Switch(row, &cfg.hud_frametime);
+    EndRow(row);
+  }
+
+  row = BeginRow("Ping", "Round trip to the game server");
+  Switch(row, &cfg.hud_ping.on);
+  EndRow(row);
+
+  row = BeginRow("Server Location", "Where the server is; its address is looked up at ip-api.com");
+  Switch(row, &cfg.hud_server.on);
+  EndRow(row);
+  if (cfg.hud_server.on) {
+    row = BeginRow("Show Server Address", "The server's IP under its location");
+    Switch(row, &cfg.hud_server_ip);
+    EndRow(row);
+  }
+
+  if (g_vr) {
+    // Keystrokes and the layout editor are for the desktop screen.
+    Header("In the Headset");
+    const std::vector<std::string> where = {"view", "off"};
+    int at = IndexOf(where, cfg.vr_stats);
+    row = BeginRow("Show These Stats", "As one pill low in your view, while you play");
+    Picker(row, {"In View", "Off"}, &at);
+    cfg.vr_stats = where[at];
+    EndRow(row);
+    return;
+  }
+
+  row = BeginRow("Keystrokes", "W A S D lighting up as you press them");
+  Switch(row, &cfg.hud_keys.on);
+  EndRow(row);
+  if (cfg.hud_keys.on) {
+    row = BeginRow("Space Bar", nullptr);
+    Switch(row, &cfg.hud_keys_space);
+    EndRow(row);
+    row = BeginRow("Mouse Buttons", nullptr);
+    Switch(row, &cfg.hud_keys_mouse);
+    EndRow(row);
+    if (cfg.hud_keys_mouse) {
+      row = BeginRow("Clicks per Second", "Under each mouse button");
+      Switch(row, &cfg.hud_keys_cps);
+      EndRow(row);
+    }
+    const std::vector<std::string> pressed = {"white", "blue"};
+    int pressed_idx = IndexOf(pressed, cfg.hud_keys_pressed);
+    row = BeginRow("Pressed Keys", "How a key looks while you hold it");
+    Picker(row, {"White", "Blue"}, &pressed_idx);
+    cfg.hud_keys_pressed = pressed[pressed_idx];
+    EndRow(row);
+  }
+
+  Header("Layout");
+  row = BeginRow("Move and Resize", "Drag overlays anywhere, with snapping to edges and each other");
+  if (ActionButton(row, "Edit Layout", true)) {
+    g_layout = true;
+    g_nav.focus = -1;
+  }
+  EndRow(row);
+
+  char sub[96];
+  std::snprintf(sub, sizeof(sub), "Solid like the top bar; the window follows Roblox's Background Transparency");
+  row = BeginRow("Match Roblox's Look", sub);
+  Switch(row, &cfg.hud_match_roblox);
+  EndRow(row);
+  if (!cfg.hud_match_roblox) {
+    std::snprintf(sub, sizeof(sub), "%.0f%%", cfg.hud_background * 100);
+    row = BeginRow("Background", sub);
+    Slider(row, &cfg.hud_background, 0, 1, 0.05, "Clear", "Solid");
+    EndRow(row);
+  }
+
+  row = BeginRow("Snapping", "Line overlays up with the screen and each other while dragging");
+  Switch(row, &cfg.hud_snap);
+  EndRow(row);
+
+  row = BeginRow("Reset Positions", "Put every overlay back in its default spot and size");
+  if (ActionButton(row, "Reset")) ResetLayout(cfg);
+  EndRow(row);
+}
+
+void AutomationPage(Config& cfg) {
+  Header("Autoclicker and Macros", true);
+  Row row = BeginRow("Automation Window", "A floating window that stays on screen while you play");
+  Switch(row, &cfg.tools_open);
+  EndRow(row);
+
+  row = BeginRow("Pause While This Menu Is Open", "No clicks or macro keys reach the game behind the menu");
+  Switch(row, &cfg.pause_in_menu);
+  EndRow(row);
+
+  Header("Hotkeys");
+  const std::vector<std::string> keys = {"off", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F9", "F10",
+                                          "F11", "F12", "Insert", "Home", "End", "PageUp", "PageDown", "Pause"};
+  std::vector<std::string> labels = keys;
+  labels[0] = "None";
+  struct HotkeyRow { const char* title; const char* subtitle; std::string* value; } hotkeys[] = {
+      {"Autoclicker On / Off", "Starts and stops clicking", &cfg.key_clicker},
+      {"Play / Stop Macro", "Plays the macro loaded in the window", &cfg.key_macro},
+      {"Record Macro", "Records your keys and clicks until pressed again", &cfg.key_record},
+  };
+  for (const HotkeyRow& h : hotkeys) {
+    int idx = IndexOf(keys, *h.value);
+    row = BeginRow(h.title, h.subtitle);
+    Picker(row, labels, &idx);
+    *h.value = keys[idx];
+    EndRow(row);
+  }
+
+  Header("Status");
+  const automation::Status st = automation::GetStatus();
+  char sub[96];
+  std::snprintf(sub, sizeof(sub), st.clicking ? "Running, %d clicks so far" : "Stopped", st.clicks);
+  row = BeginRow("Autoclicker", sub);
+  StatusDot(row, st.clicking);
+  EndRow(row);
+  std::snprintf(sub, sizeof(sub), "%s", st.recording ? "Recording" : st.playing ? "Playing" : "Idle");
+  row = BeginRow("Macro", sub);
+  StatusDot(row, st.recording || st.playing);
   EndRow(row);
 }
 
@@ -730,6 +1058,13 @@ void SettingsPage(Config& cfg) {
   cfg.menu_button = keys[where];
   EndRow(row);
 
+  const std::vector<std::string> sticks = {"left_stick", "right_stick"};
+  int stick = IndexOf(sticks, cfg.vr_toggle);
+  row = BeginRow("Open in VR", "Hold this thumbstick click for half a second; point and pull the trigger");
+  Picker(row, {"Hold Left Stick", "Hold Right Stick"}, &stick);
+  cfg.vr_toggle = sticks[stick];
+  EndRow(row);
+
   Header("Piper Models Directory");
   if (!g_piper_dir_loaded) {
     std::snprintf(g_piper_dir, sizeof(g_piper_dir), "%s", cfg.piper_dir.c_str());
@@ -743,21 +1078,10 @@ void SettingsPage(Config& cfg) {
 
   Header("About");
   const std::string last = LastMessage();
-  row = BeginRow("Vox TTS", last.empty() ? "Nothing spoken yet" : ("Last spoken: " + last).c_str());
+  row = BeginRow("Vox Menu", last.empty() ? "Nothing spoken yet" : ("Last spoken: " + last).c_str());
   EndRow(row);
 }
 
-bool Same(const Config& a, const Config& b) {
-  return a.enabled == b.enabled && a.intercept_chat == b.intercept_chat && a.output == b.output && a.engine == b.engine &&
-         a.piper_model == b.piper_model && a.piper_dir == b.piper_dir &&
-         a.piper_speed == b.piper_speed && a.espeak_voice == b.espeak_voice &&
-         a.espeak_speed == b.espeak_speed && a.espeak_pitch == b.espeak_pitch &&
-         a.voice == b.voice && a.style == b.style && a.animalese_lang == b.animalese_lang &&
-         a.pitch == b.pitch && a.speed == b.speed && a.vc_volume == b.vc_volume &&
-         a.local_volume == b.local_volume && a.mix_real_mic == b.mix_real_mic &&
-         a.skip_commands == b.skip_commands && a.sample_pack == b.sample_pack &&
-         a.menu_button == b.menu_button;
-}
 
 // --------------------------------------------------------------------------
 // The menu
@@ -797,9 +1121,14 @@ void SwitchTab(int tab) {
 void DrawPage(int tab, Config& cfg) {
   if (tab == 0) TTSPage(cfg);
   if (tab == 1) OutputPage(cfg);
-  if (tab == 2) SettingsPage(cfg);
+  if (tab == 2) GamePage(cfg);
+  if (tab == 3) HudPage(cfg);
+  if (tab == 4) AutomationPage(cfg);
+  if (tab == 5) SettingsPage(cfg);
   ImGui::Dummy(ImVec2(1, S(8)));
 }
+
+constexpr int kNumTabs = 6;
 
 struct PanelRect {
   ImVec2 min, max;
@@ -807,11 +1136,13 @@ struct PanelRect {
 PanelRect g_panel;
 
 void DrawMenu(Config& cfg, float W, float H, bool closing) {
-  const float pw = std::min(S(864), W - S(32));
-  const float ph = std::min(S(736), H - S(110));
-  const float rest_y = std::round(std::max(S(64), (H - ph) / 2 + S(20)));
+  // In the headset the panel is the whole texture: no dimming or sliding.
+  const float pw = g_vr ? W : std::min(S(864), W - S(32));
+  const float ph = g_vr ? H : std::min(S(736), H - S(110));
+  const float rest_y = g_vr ? 0 : std::round(std::max(S(64), (H - ph) / 2 + S(20)));
   float y = rest_y, dim = 0;
-  if (!closing) {
+  if (g_vr) {
+  } else if (!closing) {
     const float e = EaseOutQuart(g_opened_at, kOpenTime);
     y = std::round(H + (rest_y - H) * e);  // top edge starts at the bottom of the screen
     dim = kDim * e;
@@ -827,12 +1158,20 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
 
   // Tabs: Roblox icon + label; the active one is white with an underline.
   struct Tab { const char* label; const char* icon; } tabs[] = {
-      {"TTS", "frame-bubble-soundwave"}, {"Output", "speaker"}, {"Settings", "gear"}};
-  constexpr int kNumTabs = 3;
-  const float inset = S(20), tab_h = S(60);
-  const float tab_w = (pw - inset * 2) / kNumTabs;
+      {"TTS", "frame-bubble-soundwave"}, {"Output", "speaker"}, {"Game", "controller"}, {"HUD", "gauge"},
+      {"Automation", "cursor-arrow"}, {"Settings", "gear"}};
+  // Automation (clicks and keys) has no place in VR.
+  std::vector<int> shown;
   for (int i = 0; i < kNumTabs; ++i) {
-    const ImVec2 a(p0.x + inset + i * tab_w, p0.y), b(a.x + tab_w, p0.y + tab_h);
+    if (!(g_vr && i == 4)) shown.push_back(i);
+  }
+  if (std::find(shown.begin(), shown.end(), g_tab) == shown.end()) SwitchTab(0);
+  const int shown_at = static_cast<int>(std::find(shown.begin(), shown.end(), g_tab) - shown.begin());
+  const float inset = S(20), tab_h = S(60);
+  const float tab_w = (pw - inset * 2) / shown.size();
+  for (int k = 0; k < static_cast<int>(shown.size()); ++k) {
+    const int i = shown[k];
+    const ImVec2 a(p0.x + inset + k * tab_w, p0.y), b(a.x + tab_w, p0.y + tab_h);
     bool hovered = false;
     if (!closing) {
       ImGui::PushID(i);
@@ -848,14 +1187,17 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
     if (!Icon(g_dl, tabs[i].icon, ic, S(26), col)) {
       if (i == 0) BubbleIcon(g_dl, ic, icon, col, S(1.6f), false, -1);
       if (i == 1) SpeakerIcon(ic, icon, col, S(1.6f));
-      if (i == 2) GearIcon(ic, icon, col, S(1.6f));
+      if (i == 2) ControllerIcon(ic, icon, col, S(1.6f));
+      if (i == 3) GaugeIcon(ic, icon, col, S(1.6f));
+      if (i == 4) CursorIcon(ic, icon, col, S(1.6f));
+      if (i == 5) GearIcon(ic, icon, col, S(1.6f));
     }
     Text(g_fonts.tab, ImVec2(x + icon + gap, ic.y - ts.y / 2), col, tabs[i].label);
   }
   // The thin line under the whole tab row; the active underline sits on it.
   g_dl->AddRectFilled(ImVec2(p0.x + inset, p0.y + tab_h - S(1)), ImVec2(p1.x - inset, p0.y + tab_h), C(51, 51, 51));
   if (!closing) {
-    const ImVec2 a(p0.x + inset + g_tab * tab_w, p0.y + tab_h - S(2));
+    const ImVec2 a(p0.x + inset + shown_at * tab_w, p0.y + tab_h - S(2));
     g_dl->AddRectFilled(a, ImVec2(a.x + tab_w, p0.y + tab_h), White());
   }
   // The page and buttons vanish as soon as the menu closes.
@@ -863,7 +1205,8 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
 
   // Q / E switch pages too, like the gamepad bumpers.
   if (!closing && !g_editing && (ImGui::IsKeyPressed(ImGuiKey_Q) || ImGui::IsKeyPressed(ImGuiKey_E))) {
-    SwitchTab((g_tab + (ImGui::IsKeyPressed(ImGuiKey_E) ? 1 : 2)) % 3);
+    const int n = static_cast<int>(shown.size());
+    SwitchTab(shown[(shown_at + (ImGui::IsKeyPressed(ImGuiKey_E) ? 1 : n - 1)) % n]);
   }
 
   // Page content in a clipped viewport; on a page switch the old page slides
@@ -944,7 +1287,9 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
     const float lead = S(28), lgap = S(12);
     const float x = (a.x + b.x) / 2 - (lead + lgap + ts.x) / 2;
     const ImVec2 lc(x + lead / 2, (a.y + b.y) / 2);
-    if (bt.icon == nullptr) {
+    if (bt.icon == nullptr && g_vr) {
+      // No keyboard in the headset: no key hint.
+    } else if (bt.icon == nullptr) {
       KeyHint(lc, "ESC", White());
     } else if (!Icon(g_dl, bt.icon, lc, S(24), White())) {
       KeyHint(lc, i == 0 ? "T" : "S", White());
@@ -953,34 +1298,33 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
     if (clicked) {
       if (i == 0 && g_test[0]) Say(g_test, true);
       if (i == 1) StopSpeaking();
-      if (i == 2) overlay::RequestClose();
+      if (i == 2 && g_vr) g_vr_close = true;
+      if (i == 2 && !g_vr) overlay::RequestClose();
     }
   }
 }
 
 // The top-bar button: a solid circle like Roblox's own top-bar buttons.
-// Its icon grows while the menu is open (the circle stays the same).
-float g_icon_scale = 1.0f;
 
 void DrawTopBarButton(bool open, bool closing, float W) {
   const overlay::Metrics m = overlay::GetMetrics();
   float x, y, size;
   if (!overlay::ButtonRect(m.window_w > 0 ? m.window_w : static_cast<int>(W / g_px), &x, &y, &size)) return;
-  const bool forced = std::getenv("VOX_TTS_SHOW_BUTTON") != nullptr || std::getenv("NIGHTCAP_AC_SHOW_BUTTON") != nullptr;
+  const bool forced = Env("SHOW_BUTTON") != nullptr;
   if (!open && !closing && !forced && !InGame()) return;
   ImDrawList* dl = ImGui::GetForegroundDrawList();
   const ImVec2 c(S(x + size / 2), S(y + size / 2));
   const float r = S(size / 2);
   const ImVec2 mouse = open ? ImGui::GetIO().MousePos : ImVec2(m.mouse_x * g_px, m.mouse_y * g_px);
   const bool hovered = (mouse.x - c.x) * (mouse.x - c.x) + (mouse.y - c.y) * (mouse.y - c.y) <= r * r;
-  const float target = open ? 1.18f : 1.0f;
-  g_icon_scale += (target - g_icon_scale) * std::min(1.0f, ImGui::GetIO().DeltaTime * 18.0f);
-  float scale = g_icon_scale;
+  // Like Roblox's own top-bar buttons: #121215, lighter when hovered, and
+  // the icon turns blue (like its active gear) while the menu is open.
+  float scale = 1.0f;
   if (IsSpeaking()) scale *= 1.0f + 0.04f * std::sin(Now() * 12.0f);  // talking
-  dl->AddCircleFilled(c, r, hovered ? C(27, 28, 33) : C(6, 6, 8), 48);
-  if (!Icon(dl, "frame-bubble-soundwave", c, S(26) * scale, White())) {
-    BubbleIcon(dl, c, S(22) * scale, White(), S(1.8f), true, IsSpeaking() ? Now() : -1.0f);
-  }
+  dl->AddCircleFilled(c, r, hovered ? C(42, 43, 48) : C(18, 18, 21), 48);
+  const ImU32 ink = open ? C(1, 153, 237) : White();
+  // The logo: white with a blue dot; blue with a white dot while open.
+  VoxMark(dl, c, S(24) * scale, ink, open ? White() : C(1, 153, 237));
   if (open) {
     ImGui::SetCursorScreenPos(ImVec2(c.x - r, c.y - r));
     if (ImGui::InvisibleButton("topbar", ImVec2(r * 2, r * 2))) overlay::RequestClose();
@@ -988,8 +1332,14 @@ void DrawTopBarButton(bool open, bool closing, float W) {
 }
 
 bool g_was_open = false;
+bool g_blur = false;  // the player clicked into the game: drop keyboard focus
 
 }  // namespace
+
+bool OverMenu(ImVec2 p) {
+  return overlay::MenuOpen() && !g_layout && p.x >= g_panel.min.x && p.x < g_panel.max.x && p.y >= g_panel.min.y &&
+         p.y < g_panel.max.y;
+}
 
 void ResetFonts() { g_fonts.px = 0; }
 
@@ -1016,6 +1366,10 @@ bool PrepareFonts(float px) {
   g_fonts.header = AddFont(dir, "BuilderSans-Bold.otf", std::round(25 * px), fallback);
   g_fonts.button = AddFont(dir, "BuilderSans-Bold.otf", std::round(18 * px), fallback);
   g_fonts.hint = AddFont(dir, "BuilderSans-Bold.otf", std::round(10 * px), fallback);
+  g_fonts.ui = AddFont(dir, "BuilderSans-Medium.otf", std::round(15 * px), fallback);
+  g_fonts.ui_bold = AddFont(dir, "BuilderSans-Bold.otf", std::round(15 * px), fallback);
+  // HUD overlays are drawn at any size from one large bake.
+  g_fonts.hud = AddFont(dir, "BuilderSans-Bold.otf", std::round(32 * px), fallback);
   io.FontDefault = g_fonts.value;
 
   // Roblox's icons, baked large and drawn at the sizes each spot needs.
@@ -1026,7 +1380,7 @@ bool PrepareFonts(float px) {
     ranges.clear();
     for (const char* name : {"frame-bubble-soundwave", "speaker", "gear", "chevron-large-left",
                              "chevron-large-right", "circle-minus", "circle-plus", "square-text-esc",
-                             "play-large", "stop-large"}) {
+                             "play-large", "stop-large", "gauge", "cursor-arrow", "controller"}) {
       if (const uint32_t cp = g_icons.Find(name); cp != 0 && cp <= 0xFFFF) {
         ranges.push_back(static_cast<ImWchar>(cp));
         ranges.push_back(static_cast<ImWchar>(cp));
@@ -1058,6 +1412,9 @@ void FeedInput(const std::vector<overlay::Input>& input, float px) {
       case overlay::Input::kText:
         io.AddInputCharactersUTF8(in.text.c_str());
         break;
+      case overlay::Input::kBlur:
+        g_blur = true;
+        break;
       case overlay::Input::kKey: {
         io.AddKeyEvent(ImGuiMod_Ctrl, (in.mod & SDL_KMOD_CTRL) != 0);
         io.AddKeyEvent(ImGuiMod_Shift, (in.mod & SDL_KMOD_SHIFT) != 0);
@@ -1080,6 +1437,7 @@ void FeedInput(const std::vector<overlay::Input>& input, float px) {
           case SDLK_S: key = ImGuiKey_S; break;
           case SDLK_T: key = ImGuiKey_T; break;
           case SDLK_KP_ENTER: key = ImGuiKey_KeypadEnter; break;
+          case SDLK_ESCAPE: key = ImGuiKey_Escape; break;
           case SDLK_A: key = ImGuiKey_A; break;
           case SDLK_C: key = ImGuiKey_C; break;
           case SDLK_V: key = ImGuiKey_V; break;
@@ -1097,13 +1455,13 @@ void FeedInput(const std::vector<overlay::Input>& input, float px) {
 bool Draw(float px, bool srgb) {
   g_px = px;
   g_srgb = srgb;
+  CountFrame();
   ImGuiIO& io = ImGui::GetIO();
   const float W = io.DisplaySize.x, H = io.DisplaySize.y;
   const bool open = overlay::MenuOpen();
-  if (!open) {
-    // No input reaches the menu while it is closed; clear stale state.
+  if (!open && !overlay::CursorFree()) {
+    // First-person mouse lock: the mouse belongs to the game alone.
     io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-    io.AddMouseButtonEvent(0, false);
   }
   if (open && !g_was_open) {
     g_opened_at = Now();
@@ -1112,11 +1470,23 @@ bool Draw(float px, bool srgb) {
     g_nav = Nav{};
   } else if (!open && g_was_open) {
     g_closed_at = Now();
+    g_layout = false;
+    // A press that was still held when the menu closed.
+    for (int b = 0; b < 3; ++b) io.AddMouseButtonEvent(b, false);
   }
   g_was_open = open;
   const bool closing = !open && Closing();
   Config cfg = GetConfig();
   const Config before = cfg;
+  if (g_blur) {
+    g_blur = false;
+    ImGui::ClearActiveID();
+    ImGui::FocusWindow(nullptr);
+  }
+
+  AdoptSideBySide(cfg);
+  if (open && g_layout) g_layout = LayoutEditor(cfg);
+  DrawHud(cfg);
 
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImVec2(W, H));
@@ -1126,16 +1496,23 @@ bool Draw(float px, bool srgb) {
                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollWithMouse;
   if (!open) flags |= ImGuiWindowFlags_NoInputs;
-  ImGui::Begin("##vox-tts", nullptr, flags);
+  ImGui::Begin("##vox-menu", nullptr, flags);
+  ImGuiWindow* main_window = ImGui::GetCurrentWindow();
   g_dl = ImGui::GetWindowDrawList();
-  if (open) {
+  if (open && !g_layout) {
     UpdateNav();
     DrawMenu(cfg, W, H, false);
     g_editing = io.WantTextInput;
-    // Clicking outside the panel closes the menu, like Roblox's.
+    // Clicking outside the panel (and off the floating windows) closes the
+    // menu, like Roblox's.
     const ImVec2 mp = io.MousePos;
     const bool inside = mp.x >= g_panel.min.x && mp.x < g_panel.max.x && mp.y >= g_panel.min.y && mp.y < g_panel.max.y;
-    if (ImGui::IsMouseClicked(0) && !inside) overlay::RequestClose();
+    ImGuiWindow* hovered = GImGui->HoveredWindow;
+    const bool on_window = hovered != nullptr && hovered->RootWindow != main_window;
+    if (ImGui::IsMouseClicked(0) && !inside && !on_window && !overlay::InHotRect(mp.x / px, mp.y / px) &&
+        !Picking()) {
+      overlay::RequestClose();
+    }
   } else if (closing) {
     DrawMenu(cfg, W, H, true);
   }
@@ -1143,12 +1520,103 @@ bool Draw(float px, bool srgb) {
   ImGui::End();
   ImGui::PopStyleVar(2);
 
-  overlay::SetWantsText(open && io.WantTextInput);
-  if (!Same(cfg, before)) SetConfig(cfg);
+  // The floating automation window and click points, over everything.
+  std::vector<ImVec4> hot;
+  DrawTools(cfg, &hot);
+  DrawStatusBadge(cfg);
+
+  // Tell the SDL side where the overlay takes the mouse while the menu is
+  // closed: the floating windows (and their popups) and the markers.
+  std::vector<overlay::Rect> rects;
+  for (ImGuiWindow* w : GImGui->Windows) {
+    // Not ImGui's implicit "Debug" window (active until the frame ends) or
+    // tooltips, which follow the mouse.
+    if (!w->Active || w->Hidden || w->IsFallbackWindow || (w->Flags & ImGuiWindowFlags_Tooltip) ||
+        w->RootWindow == main_window) {
+      continue;
+    }
+    hot.push_back(ImVec4(w->Pos.x, w->Pos.y, w->Pos.x + w->Size.x, w->Pos.y + w->Size.y));
+  }
+  for (const ImVec4& r : hot) rects.push_back({r.x / px, r.y / px, r.z / px, r.w / px});
+  overlay::SetHotRects(std::move(rects));
+  overlay::SetCaptureMouse(Picking());
+  overlay::SetWantsEscape((open && g_layout) || Picking());
+  overlay::SetWantsText(io.WantTextInput);
+
+  if (cfg != before) SetConfig(cfg);
   SaveConfigIfDirty();
   const bool button_on = cfg.menu_button != "off" &&
-                         (InGame() || std::getenv("VOX_TTS_SHOW_BUTTON") || std::getenv("NIGHTCAP_AC_SHOW_BUTTON"));
-  return open || closing || button_on;
+                         (InGame() || Env("SHOW_BUTTON") != nullptr);
+  return open || closing || button_on || HudVisible(cfg);
+}
+
+}  // namespace nac::ui
+
+namespace nac::ui {
+
+// --------------------------------------------------------------------------
+// The headset (VR) panel
+
+namespace {
+int g_surface = 0;
+Fonts g_surface_fonts[2];
+ImFont* g_surface_icons[2] = {nullptr, nullptr};
+}  // namespace
+
+void SelectSurface(int surface) {
+  if (surface == g_surface) return;
+  g_surface_fonts[g_surface] = g_fonts;
+  g_surface_icons[g_surface] = g_icon_font;
+  g_surface = surface;
+  g_fonts = g_surface_fonts[surface];
+  g_icon_font = g_surface_icons[surface];
+}
+
+bool TakeVrCloseRequest() {
+  const bool close = g_vr_close;
+  g_vr_close = false;
+  return close;
+}
+
+bool DrawVr(float px, bool srgb, bool panel_open, float* stats_w) {
+  g_px = px;
+  g_srgb = srgb;
+  g_alpha = 1.0f;
+  g_vr = true;
+  ImGuiIO& io = ImGui::GetIO();
+  Config cfg = GetConfig();
+  const Config before = cfg;
+
+  ImGui::SetNextWindowPos(ImVec2(0, 0));
+  ImGui::SetNextWindowSize(io.DisplaySize);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+  ImGui::Begin("##vox-vr", nullptr,
+               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove |
+                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                   ImGuiWindowFlags_NoScrollWithMouse);
+  g_dl = ImGui::GetWindowDrawList();
+  if (panel_open) {
+    g_editing = false;
+    DrawMenu(cfg, S(kVrPanelW), S(kVrPanelH), false);
+    // Where the controller points: a blue dot with a white ring.
+    const ImVec2 m = io.MousePos;
+    if (m.x >= 0 && m.y >= 0 && m.x < S(kVrPanelW) && m.y < S(kVrPanelH)) {
+      ImDrawList* fg = ImGui::GetForegroundDrawList();
+      fg->AddCircleFilled(m, S(7), C(1, 153, 237), 24);
+      fg->AddCircle(m, S(7), White(), 24, S(2));
+    }
+  }
+  ImGui::End();
+  ImGui::PopStyleVar(2);
+  *stats_w = 0;
+  if (cfg.vr_stats != "off") {
+    *stats_w = DrawStatsPill(ImGui::GetForegroundDrawList(), cfg,
+                             ImVec2(0, S(kVrPanelH) + std::round((S(kVrStatsH) - S(44)) / 2)), g_px);
+  }
+  g_vr = false;
+  if (cfg != before) SetConfig(cfg);
+  return panel_open || *stats_w > 0;
 }
 
 }  // namespace nac::ui

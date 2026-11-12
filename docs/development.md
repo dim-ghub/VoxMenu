@@ -1,12 +1,12 @@
 # Development & Testing Guide
 
-This guide covers building Vox TTS from source, running the automated test suite, inspecting mock drivers, and debugging the runtime.
+This guide covers building Vox Menu from source, running the automated test suite, inspecting mock drivers, and debugging the runtime.
 
 ---
 
 ## 1. Prerequisites
 
-To build Vox TTS, the following tools and development headers are required:
+To build Vox Menu, the following tools and development headers are required:
 
 - **Compiler**: C++17 compliant compiler (`g++` or `clang++`).
 - **Build System**: GNU `make`.
@@ -34,9 +34,8 @@ make build
 
 Artifacts generated in `build/`:
 - `libvox_tts.so`: The core shared library (SDL hooks + Vulkan layer).
-- `libnightcap_ac.so`: Backward-compatible symlink to `libvox_tts.so`.
-- `vox-tts-render`: Standalone CLI tool to render Animalese directly to a WAV file.
-- `nightcap-ac-render`: Symlink to `vox-tts-render`.
+- `libvox_tts.so`, `libnightcap_ac.so`: symlinks to `libvox_menu.so` under the older names.
+- `vox-menu-render`: Standalone CLI tool to render Animalese directly to a WAV file.
 
 ---
 
@@ -53,8 +52,9 @@ The test framework includes dedicated C++ stand-ins to exercise the hooks and ov
 
 1. **`build/vk_driver` (`tests/vk_driver.cc`)**:
    - Spawns a headless Vulkan window with swapchain.
-   - Loads `libvox_tts.so` as a Vulkan layer.
-   - Feeds scripted mouse and keyboard inputs frame-by-frame.
+   - Loads `libvox_menu.so` as a Vulkan layer.
+   - Feeds scripted mouse and keyboard inputs frame-by-frame (`key`, `click`, `move`, `text`, and
+     `press` / `release` for drags).
    - Dumps framebuffer images (`.ppm`) to verify pixel-accurate menu rendering, hover states, and animations.
 
 2. **`build/mic_driver` (`tests/mic_driver.cc`)**:
@@ -65,8 +65,24 @@ The test framework includes dedicated C++ stand-ins to exercise the hooks and ov
 3. **`build/chat_test` (`tests/chat_test.cc`)**:
    - Unit tests the `ChatTracker` class (`src/chat.cc`) against complex typing sequences, Unicode strings, backspaces, text selections, and multiline pastes.
 
-4. **Python Test Suites (`tests/`)**:
-   - `test_inprocess.py`: Tests Vulkan overlay rendering, tab switching, keyboard selection, config migration, and audio capture.
+4. **`build/automation_test` (`tests/automation_test.cc`)**:
+   - Unit tests the autoclicker and macro engine with input injection replaced by a log: click
+     timing and limits, fixed points, hold mode, hotkeys, playback, looping, recording, and the
+     macro file format.
+   - Server tracking from Roblox's log lines, the packet-timing ping estimator, server-hop
+     picking, and joining through a stand-in for Nightcap's launch broker (a real
+     `MOCKTAIL-EXTERNAL-LAUNCH/1` socket).
+
+5. **`build/xr_driver` (`tests/xr_driver.cc`)**:
+   - Stands in for Nightcap's VR path: Vulkan made through the runtime, a session with the Vulkan
+     binding, its own action set, and frames. `test_xr.py` runs it against Monado started headless
+     (`XRT_COMPOSITOR_NULL=1`, a simulated headset, in a private runtime directory) and checks the
+     panel and stats it renders. Skipped where Monado isn't installed. Monado's simulated
+     controllers can't be pressed, so controller input is only covered by the unit tests of the
+     panel geometry and bindings.
+
+6. **Python Test Suites (`tests/`)**:
+   - `test_inprocess.py`: Tests Vulkan overlay rendering, tab switching, keyboard selection, config migration, audio capture, the HUD overlays, the floating window's input routing, the autoclicker hotkey, layout-editor snapping, and the FPS cap.
    - `test_launcher.py`: Tests the shell launcher, lock detection, and desktop patching.
    - `test_synth.py`: Tests the audio synthesizer math, pitch autocorrelation, RMS power, and duration scaling across styles.
 
@@ -74,14 +90,18 @@ The test framework includes dedicated C++ stand-ins to exercise the hooks and ov
 
 ## 4. Debugging & Environment Flags
 
-Vox TTS provides several environment variables for diagnostic output and inspection:
+Vox Menu provides several environment variables for diagnostic output and inspection:
 
 | Environment Variable | Description |
 | --- | --- |
-| `VOX_TTS_MENU_OPEN=1` | Starts the Vulkan layer with the overlay menu immediately open on the first frame. |
-| `VOX_TTS_SHOW_BUTTON=1` | Forces the top-bar overlay button to render even outside of an active game. |
-| `VOX_TTS_DUMP=/path/to/frame.ppm` | Dumps the composited Vulkan frame buffer to a PPM image file. |
-| `VOX_TTS_DUMP_FRAME=N` | Specifies the frame number to dump (default: frame 30, allowing fonts and layouts to settle). |
-| `VOX_TTS_LIB=/path/to/libvox_tts.so` | Overrides the library path searched by the launcher script. |
+| `VOX_MENU_MENU_OPEN=1` | Starts the Vulkan layer with the overlay menu immediately open on the first frame. |
+| `VOX_MENU_SHOW_BUTTON=1` | Forces the top-bar overlay button to render even outside of an active game. |
+| `VOX_MENU_DUMP=/path/to/frame.ppm` | Dumps the composited Vulkan frame buffer to a PPM image file. |
+| `VOX_MENU_DUMP_FRAME=N` | Specifies the frame number to dump (default: frame 30, allowing fonts and layouts to settle). |
+| `VOX_MENU_LIB=/path/to/libvox_menu.so` | Overrides the library path searched by the launcher script. |
 
-Legacy environment variables (`NIGHTCAP_AC_*`) continue to function for backward compatibility.
+| `VOX_MENU_VR_OPEN=1` | Opens the headset panel on the first VR frame. |
+| `VOX_MENU_VR_DUMP=/path/to/panel.ppm` | Saves the headset panel's texture (the `VOX_MENU_VR_DUMP_FRAME`-th rendered, default 10th), transparent parts over dark grey. |
+| `DISABLE_VOX_MENU_XR_LAYER=1` | Turns the OpenXR (headset) layer off. |
+
+The older `VOX_TTS_*` and `NIGHTCAP_AC_*` names still work. `DISABLE_VOX_MENU_LAYER=1` turns the overlay layer off.
