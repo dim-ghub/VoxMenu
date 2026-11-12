@@ -123,7 +123,7 @@ Press **F8** or click the top-bar button to open the menu.
    * **Test Voice & Stop Controls:** Immediate auditioning and audio playback controls.
 
 <p align="center">
-  <img src="docs/images/vox-tts-animal-crossing.png" alt="Animal Crossing Engine Settings" width="750">
+  <img src="docs/images/vox-menu-tts.png" alt="Animal Crossing Engine Settings" width="750">
 </p>
 
 2. **Output:**
@@ -137,7 +137,7 @@ Press **F8** or click the top-bar button to open the menu.
    * **Voice Chat Status:** Live indicator showing if Roblox is currently capturing audio.
 
 <p align="center">
-  <img src="docs/images/vox-tts-output.png" alt="Audio Output Settings" width="750">
+  <img src="docs/images/vox-menu-output.png" alt="Audio Output Settings" width="750">
 </p>
 
 3. **Game:**
