@@ -3,6 +3,7 @@
   global:
     SDL_*;
     vkNegotiateLoaderLayerInterfaceVersion;
+    xrNegotiateLoaderApiLayerInterface;
   local:
     *;
 };

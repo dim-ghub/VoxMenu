@@ -1,0 +1,11 @@
+{
+  "file_format_version": "1.0.0",
+  "api_layer": {
+    "name": "XR_APILAYER_VOXMENU_overlay",
+    "library_path": "@LIB@",
+    "api_version": "1.0",
+    "implementation_version": "1",
+    "description": "Vox Menu in the headset",
+    "disable_environment": "DISABLE_VOX_MENU_XR_LAYER"
+  }
+}

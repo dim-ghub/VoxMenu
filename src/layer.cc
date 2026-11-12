@@ -1,4 +1,4 @@
-// Vulkan layer that draws the Vox TTS menu onto Nightcap's frames.
+// Vulkan layer that draws the Vox Menu overlay onto Nightcap's frames.
 //
 // The same library is LD_PRELOADed (SDL hooks) and named in an implicit
 // layer manifest, so the loader dlopen()s the already loaded copy and both
@@ -6,13 +6,14 @@
 // into the swapchain image, waiting on the game's semaphores and signalling
 // our own, which the present then waits on.
 //
-// Debugging: VOX_TTS_DUMP (or legacy NIGHTCAP_AC_DUMP)=/path.ppm saves one composited
-// frame (the 30th drawn, or VOX_TTS_DUMP_FRAME / NIGHTCAP_AC_DUMP_FRAME), and
-// VOX_TTS_MENU_OPEN (or NIGHTCAP_AC_MENU_OPEN)=1 starts with the menu open.
+// Debugging: VOX_MENU_DUMP=/path.ppm saves one composited frame (the 30th
+// drawn, or VOX_MENU_DUMP_FRAME), and VOX_MENU_MENU_OPEN=1 starts with the
+// menu open. The older VOX_TTS_ / NIGHTCAP_AC_ prefixes work too.
 
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
 
+#include <cfloat>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,8 +25,10 @@
 #include "app.h"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
+#include "framecap.h"
 #include "overlay.h"
 #include "ui.h"
+#include "xr_render.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
@@ -124,12 +127,13 @@ bool IsSrgb(VkFormat f) {
 // --- ImGui backend plumbing ------------------------------------------------------
 
 DeviceData* g_loading_device = nullptr;
+DeviceData* g_functions_device = nullptr;  // the device ImGui's Vulkan calls go to
 
 // Command buffers made inside a layer need the loader's dispatch pointer, or
 // layers below us can't look them up.
 VKAPI_ATTR VkResult VKAPI_CALL AllocateCommandBuffersForImGui(
     VkDevice device, const VkCommandBufferAllocateInfo* info, VkCommandBuffer* out) {
-  DeviceData* d = g_renderer.device;
+  DeviceData* d = g_loading_device;
   const VkResult r = d->AllocateCommandBuffers(device, info, out);
   if (r == VK_SUCCESS && d->set_loader_data != nullptr) {
     for (uint32_t i = 0; i < info->commandBufferCount; ++i) d->set_loader_data(device, out[i]);
@@ -144,6 +148,19 @@ PFN_vkVoidFunction LoadForImGui(const char* name, void*) {
   }
   if (PFN_vkVoidFunction fn = d->gdpa(d->device, name)) return fn;
   return d->instance->gipa(d->instance->instance, name);
+}
+
+// ImGui's Vulkan backend calls through one set of function pointers; point
+// them at the device about to be drawn on (the desktop or the headset's).
+bool UseDevice(DeviceData* d) {
+  g_loading_device = d;
+  if (g_functions_device == d) return true;
+  if (!ImGui_ImplVulkan_LoadFunctions(d->instance->api_version, LoadForImGui)) {
+    Log("overlay: could not load Vulkan functions");
+    return false;
+  }
+  g_functions_device = d;
+  return true;
 }
 
 void ShutdownRenderer() {
@@ -182,11 +199,7 @@ bool InitRenderer(SwapchainData* sc, VkQueue queue, uint32_t family) {
     return false;
   }
   g_renderer.device = d;
-  g_loading_device = d;
-  if (!ImGui_ImplVulkan_LoadFunctions(d->instance->api_version, LoadForImGui)) {
-    Log("overlay: could not load Vulkan functions");
-    return false;
-  }
+  if (!UseDevice(d)) return false;
   ImGui_ImplVulkan_InitInfo init{};
   init.ApiVersion = d->instance->api_version;
   init.Instance = d->instance->instance;
@@ -413,6 +426,8 @@ VkSemaphore DrawOverlay(SwapchainData* sc, VkQueue queue, uint32_t image_index,
   if (!InitRenderer(sc, queue, family)) return VK_NULL_HANDLE;
 
   ImGui::SetCurrentContext(g_renderer.context);
+  ui::SelectSurface(0);
+  if (!UseDevice(d)) return VK_NULL_HANDLE;
   const overlay::Metrics m = overlay::GetMetrics();
   const float px = m.window_w > 0 ? static_cast<float>(sc->extent.width) / m.window_w : 1.0f;
   if (ui::PrepareFonts(px)) {
@@ -459,14 +474,12 @@ VkSemaphore DrawOverlay(SwapchainData* sc, VkQueue queue, uint32_t image_index,
   if (d->QueueSubmit(queue, 1, &submit, f.fence) != VK_SUCCESS) return VK_NULL_HANDLE;
   f.submitted = true;
 
-  const char* dump = std::getenv("VOX_TTS_DUMP");
-  if (!dump) dump = std::getenv("NIGHTCAP_AC_DUMP");
+  const char* dump = Env("DUMP");
   if (dump) {
     // Let a few frames settle (fonts, layout) before saving one.
     // Copying waits for our draw to finish; f.done stays signalled for
     // the present, so the handoff is unchanged.
-    const char* at = std::getenv("VOX_TTS_DUMP_FRAME");
-    if (!at) at = std::getenv("NIGHTCAP_AC_DUMP_FRAME");
+    const char* at = Env("DUMP_FRAME");
     if (sc->can_copy && ++g_renderer.dumped == (at ? std::atoi(at) : 30)) DumpFrame(d, sc, f, queue, dump);
   }
   return f.done;
@@ -602,7 +615,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateSwapchainKHR(VkDevice device, const VkSwapc
   VkSwapchainCreateInfoKHR copy = *info;
   // We render into the images, and copy one out when debugging.
   copy.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  const bool dump = (std::getenv("VOX_TTS_DUMP") != nullptr || std::getenv("NIGHTCAP_AC_DUMP") != nullptr);
+  const bool dump = Env("DUMP") != nullptr;
   if (dump) copy.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   VkResult r = d->CreateSwapchainKHR(device, &copy, alloc, out);
   if (r != VK_SUCCESS) {
@@ -650,6 +663,7 @@ VKAPI_ATTR VkResult VKAPI_CALL QueuePresentKHR(VkQueue queue, const VkPresentInf
     }
   }
   lock.unlock();
+  framecap::Pace();
   if (done == VK_NULL_HANDLE) return present(queue, info);
   VkPresentInfoKHR copy = *info;
   copy.waitSemaphoreCount = 1;
@@ -698,6 +712,334 @@ PFN_vkVoidFunction DeviceHook(const char* name) {
 }  // namespace
 }  // namespace nac::layer
 
+// ---------------------------------------------------------------------------
+// The headset panel's render target (xr_render.h)
+
+namespace nac::xr_render {
+
+using layer::DeviceData;
+
+struct Image {
+  VkImage image = VK_NULL_HANDLE;
+  VkImageView view = VK_NULL_HANDLE;
+  VkFramebuffer framebuffer = VK_NULL_HANDLE;
+  VkCommandBuffer cmd = VK_NULL_HANDLE;
+  VkFence fence = VK_NULL_HANDLE;
+  bool submitted = false;
+};
+
+struct Target {
+  DeviceData* device = nullptr;
+  VkQueue queue = VK_NULL_HANDLE;
+  uint32_t family = 0;
+  VkFormat format = VK_FORMAT_UNDEFINED;
+  VkExtent2D extent{};
+  VkRenderPass render_pass = VK_NULL_HANDLE;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+  std::vector<Image> images;
+  ImGuiContext* context = nullptr;  // its own: a different size, input and fonts
+  bool backend_ready = false;
+};
+
+namespace {
+
+void Release(Target* t) {
+  DeviceData* d = t->device;
+  for (Image& img : t->images) {
+    if (img.fence) {
+      if (img.submitted) d->WaitForFences(d->device, 1, &img.fence, VK_TRUE, UINT64_MAX);
+      d->DestroyFence(d->device, img.fence, nullptr);
+    }
+    if (img.framebuffer) d->DestroyFramebuffer(d->device, img.framebuffer, nullptr);
+    if (img.view) d->DestroyImageView(d->device, img.view, nullptr);
+  }
+  t->images.clear();
+  if (t->context) {
+    ImGuiContext* previous = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(t->context);
+    if (t->backend_ready && layer::UseDevice(d)) ImGui_ImplVulkan_Shutdown();
+    ImGui::DestroyContext(t->context);
+    ImGui::SetCurrentContext(previous == t->context ? nullptr : previous);
+    t->context = nullptr;
+  }
+  if (t->descriptor_pool) d->DestroyDescriptorPool(d->device, t->descriptor_pool, nullptr);
+  if (t->pool) d->DestroyCommandPool(d->device, t->pool, nullptr);
+  if (t->render_pass) d->DestroyRenderPass(d->device, t->render_pass, nullptr);
+}
+
+// Debugging (VOX_MENU_VR_DUMP=/path.ppm): saves one rendered panel image (the
+// VOX_MENU_VR_DUMP_FRAME-th, default 10th), over dark grey so its
+// transparent parts show.
+void DumpImage(Target* t, uint32_t index, const char* path) {
+  static int frames = 0;
+  const char* at = Env("VR_DUMP_FRAME");
+  if (++frames != (at ? std::atoi(at) : 10)) return;
+  DeviceData* d = t->device;
+  const VkDeviceSize size = static_cast<VkDeviceSize>(t->extent.width) * t->extent.height * 4;
+  VkBufferCreateInfo bi{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  bi.size = size;
+  bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  VkBuffer buffer;
+  if (d->CreateBuffer(d->device, &bi, nullptr, &buffer) != VK_SUCCESS) return;
+  VkMemoryRequirements req;
+  d->GetBufferMemoryRequirements(d->device, buffer, &req);
+  VkPhysicalDeviceMemoryProperties props;
+  d->instance->GetMemoryProperties(d->physical, &props);
+  uint32_t type = UINT32_MAX;
+  const auto want = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  for (uint32_t i = 0; i < props.memoryTypeCount && type == UINT32_MAX; ++i) {
+    if ((req.memoryTypeBits & (1u << i)) && (props.memoryTypes[i].propertyFlags & want) == want) type = i;
+  }
+  VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+  ai.allocationSize = req.size;
+  ai.memoryTypeIndex = type;
+  VkDeviceMemory memory;
+  if (type == UINT32_MAX || d->AllocateMemory(d->device, &ai, nullptr, &memory) != VK_SUCCESS) {
+    d->DestroyBuffer(d->device, buffer, nullptr);
+    return;
+  }
+  d->BindBufferMemory(d->device, buffer, memory, 0);
+  Image& img = t->images[index];
+  d->ResetFences(d->device, 1, &img.fence);
+  d->ResetCommandBuffer(img.cmd, 0);
+  VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+  d->BeginCommandBuffer(img.cmd, &begin);
+  VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+  barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = img.image;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  d->CmdPipelineBarrier(img.cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                        nullptr, 0, nullptr, 1, &barrier);
+  VkBufferImageCopy copy{};
+  copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  copy.imageExtent = {t->extent.width, t->extent.height, 1};
+  d->CmdCopyImageToBuffer(img.cmd, img.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &copy);
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  d->CmdPipelineBarrier(img.cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                        0, nullptr, 0, nullptr, 1, &barrier);
+  d->EndCommandBuffer(img.cmd);
+  VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  submit.commandBufferCount = 1;
+  submit.pCommandBuffers = &img.cmd;
+  d->QueueSubmit(t->queue, 1, &submit, img.fence);
+  d->WaitForFences(d->device, 1, &img.fence, VK_TRUE, UINT64_MAX);
+  void* pixels = nullptr;
+  d->MapMemory(d->device, memory, 0, size, 0, &pixels);
+  if (FILE* out = std::fopen(path, "wb")) {
+    std::fprintf(out, "P6\n%u %u\n255\n", t->extent.width, t->extent.height);
+    const bool bgr = t->format == VK_FORMAT_B8G8R8A8_UNORM || t->format == VK_FORMAT_B8G8R8A8_SRGB;
+    const bool srgb = layer::IsSrgb(t->format);
+    const auto* p = static_cast<const unsigned char*>(pixels);
+    // Stored values are sRGB-encoded either way for these formats; blend
+    // with the grey in that encoding (close enough for a debug image).
+    (void)srgb;
+    for (VkDeviceSize i = 0; i < size; i += 4) {
+      const float a = p[i + 3] / 255.0f;
+      unsigned char rgb[3];
+      for (int c = 0; c < 3; ++c) {
+        const int src = p[i + (c == 1 ? 1 : (c == 0) == bgr ? 2 : 0)];
+        rgb[c] = static_cast<unsigned char>(src * a + 40 * (1 - a) + 0.5f);
+      }
+      std::fwrite(rgb, 1, 3, out);
+    }
+    std::fclose(out);
+    Log("headset panel: saved frame to %s", path);
+  }
+  d->UnmapMemory(d->device, memory);
+  d->FreeMemory(d->device, memory, nullptr);
+  d->DestroyBuffer(d->device, buffer, nullptr);
+}
+
+}  // namespace
+
+Target* Create(VkDevice device, uint32_t family, uint32_t queue_index, VkFormat format, VkExtent2D extent,
+               const std::vector<VkImage>& images) {
+  std::lock_guard<std::recursive_mutex> lock(layer::g_mutex);
+  DeviceData* d = layer::FindDevice(device);
+  if (d == nullptr) {
+    Log("headset panel: the OpenXR session's Vulkan device isn't one the overlay follows");
+    return nullptr;
+  }
+  auto t = std::make_unique<Target>();
+  t->device = d;
+  t->family = family;
+  t->format = format;
+  t->extent = extent;
+  d->GetDeviceQueue(d->device, family, queue_index, &t->queue);
+
+  // Cleared to transparent each frame, and handed back to the runtime in
+  // COLOR_ATTACHMENT_OPTIMAL as OpenXR expects.
+  VkAttachmentDescription color{};
+  color.format = format;
+  color.samples = VK_SAMPLE_COUNT_1_BIT;
+  color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  color.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpass{};
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments = &ref;
+  VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+  rp.attachmentCount = 1;
+  rp.pAttachments = &color;
+  rp.subpassCount = 1;
+  rp.pSubpasses = &subpass;
+  bool ok = d->CreateRenderPass(d->device, &rp, nullptr, &t->render_pass) == VK_SUCCESS;
+
+  VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+  pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  pool.queueFamilyIndex = family;
+  ok = ok && d->CreateCommandPool(d->device, &pool, nullptr, &t->pool) == VK_SUCCESS;
+
+  VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16}};
+  VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  dp.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  dp.maxSets = 16;
+  dp.poolSizeCount = 1;
+  dp.pPoolSizes = sizes;
+  ok = ok && d->CreateDescriptorPool(d->device, &dp, nullptr, &t->descriptor_pool) == VK_SUCCESS;
+
+  t->images.resize(images.size());
+  for (size_t i = 0; ok && i < images.size(); ++i) {
+    Image& img = t->images[i];
+    img.image = images[i];
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = images[i];
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = format;
+    view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    ok = d->CreateImageView(d->device, &view, nullptr, &img.view) == VK_SUCCESS;
+    VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    fb.renderPass = t->render_pass;
+    fb.attachmentCount = 1;
+    fb.pAttachments = &img.view;
+    fb.width = extent.width;
+    fb.height = extent.height;
+    fb.layers = 1;
+    ok = ok && d->CreateFramebuffer(d->device, &fb, nullptr, &img.framebuffer) == VK_SUCCESS;
+    VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    alloc.commandPool = t->pool;
+    alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc.commandBufferCount = 1;
+    ok = ok && d->AllocateCommandBuffers(d->device, &alloc, &img.cmd) == VK_SUCCESS;
+    if (ok && d->set_loader_data) d->set_loader_data(d->device, img.cmd);
+    VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    ok = ok && d->CreateFence(d->device, &fence, nullptr, &img.fence) == VK_SUCCESS;
+  }
+  if (!ok) {
+    Log("headset panel: could not set up its Vulkan resources");
+    Release(t.get());
+    return nullptr;
+  }
+  ImGuiContext* previous = ImGui::GetCurrentContext();
+  t->context = ImGui::CreateContext();
+  ImGui::GetIO().IniFilename = nullptr;
+  ImGui::GetIO().LogFilename = nullptr;
+  ImGui::SetCurrentContext(previous);
+  Log("headset panel ready (%ux%u, format %d)", extent.width, extent.height, format);
+  return t.release();
+}
+
+void Destroy(Target* t) {
+  if (t == nullptr) return;
+  std::lock_guard<std::recursive_mutex> lock(layer::g_mutex);
+  Release(t);
+  delete t;
+}
+
+bool Render(Target* t, uint32_t index, bool panel_open, const Pointer& pointer, float* stats_w) {
+  *stats_w = 0;
+  if (t == nullptr || index >= t->images.size()) return false;
+  std::lock_guard<std::recursive_mutex> lock(layer::g_mutex);
+  DeviceData* d = t->device;
+  ImGuiContext* previous = ImGui::GetCurrentContext();
+  ImGui::SetCurrentContext(t->context);
+  ui::SelectSurface(1);
+  bool visible = false;
+  if (layer::UseDevice(d)) {
+    if (!t->backend_ready) {
+      ImGui_ImplVulkan_InitInfo init{};
+      init.ApiVersion = d->instance->api_version;
+      init.Instance = d->instance->instance;
+      init.PhysicalDevice = d->physical;
+      init.Device = d->device;
+      init.QueueFamily = t->family;
+      init.Queue = t->queue;
+      init.DescriptorPool = t->descriptor_pool;
+      init.RenderPass = t->render_pass;
+      init.MinImageCount = 2;
+      init.ImageCount = std::max<uint32_t>(2, static_cast<uint32_t>(t->images.size()));
+      init.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+      t->backend_ready = ImGui_ImplVulkan_Init(&init);
+      if (!t->backend_ready) Log("headset panel: ImGui Vulkan init failed");
+    }
+    if (t->backend_ready) {
+      const float px = t->extent.width / ui::kVrPanelW;
+      if (ui::PrepareFonts(px)) {
+        ImGui_ImplVulkan_DestroyFontsTexture();
+        ImGui_ImplVulkan_CreateFontsTexture();
+      }
+      ImGuiIO& io = ImGui::GetIO();
+      io.DisplaySize = ImVec2(static_cast<float>(t->extent.width), static_cast<float>(t->extent.height));
+      if (pointer.valid) io.AddMousePosEvent(pointer.x, pointer.y);
+      else io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+      io.AddMouseButtonEvent(0, pointer.valid && pointer.down);
+      if (pointer.wheel != 0) io.AddMouseWheelEvent(0, pointer.wheel);
+      ImGui_ImplVulkan_NewFrame();
+      ImGui::NewFrame();
+      visible = ui::DrawVr(px, layer::IsSrgb(t->format), panel_open, stats_w);
+      ImGui::Render();
+
+      Image& img = t->images[index];
+      if (img.submitted) d->WaitForFences(d->device, 1, &img.fence, VK_TRUE, UINT64_MAX);
+      d->ResetFences(d->device, 1, &img.fence);
+      d->ResetCommandBuffer(img.cmd, 0);
+      VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+      begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+      d->BeginCommandBuffer(img.cmd, &begin);
+      VkClearValue clear{};  // transparent
+      VkRenderPassBeginInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      rp.renderPass = t->render_pass;
+      rp.framebuffer = img.framebuffer;
+      rp.renderArea.extent = t->extent;
+      rp.clearValueCount = 1;
+      rp.pClearValues = &clear;
+      d->CmdBeginRenderPass(img.cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+      if (ImDrawData* draw = ImGui::GetDrawData(); draw != nullptr && draw->TotalVtxCount > 0) {
+        ImGui_ImplVulkan_RenderDrawData(draw, img.cmd);
+      }
+      d->CmdEndRenderPass(img.cmd);
+      d->EndCommandBuffer(img.cmd);
+      VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+      submit.commandBufferCount = 1;
+      submit.pCommandBuffers = &img.cmd;
+      img.submitted = d->QueueSubmit(t->queue, 1, &submit, img.fence) == VK_SUCCESS;
+      // The runtime reads the image once it's released: finish first.
+      if (img.submitted) d->WaitForFences(d->device, 1, &img.fence, VK_TRUE, UINT64_MAX);
+      visible = visible && img.submitted;
+
+      if (const char* dump = Env("VR_DUMP"); dump && img.submitted) DumpImage(t, index, dump);
+    }
+  }
+  ui::SelectSurface(0);
+  ImGui::SetCurrentContext(previous);
+  return visible;
+}
+
+}  // namespace nac::xr_render
+
 EXPORT VKAPI_ATTR VkResult VKAPI_CALL
 vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* iface) {
   if (iface == nullptr || iface->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT) {
@@ -707,7 +1049,7 @@ vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* iface) {
   iface->pfnGetInstanceProcAddr = &nac::layer::GetInstanceProcAddr;
   iface->pfnGetDeviceProcAddr = &nac::layer::GetDeviceProcAddr;
   iface->pfnGetPhysicalDeviceProcAddr = nullptr;
-  if (std::getenv("VOX_TTS_MENU_OPEN") || std::getenv("NIGHTCAP_AC_MENU_OPEN")) {
+  if (nac::Env("MENU_OPEN")) {
     nac::overlay::SetMenuOpenFlag(true);
   }
   return VK_SUCCESS;
