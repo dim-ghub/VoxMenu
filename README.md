@@ -37,8 +37,9 @@ unmodified Nightcap. It needs no virtual audio cables, virtual microphone or sep
   and play them back once, a number of times or on a loop, at any speed. Saved as plain-text files.
 * **Piano player:** plays `.mid` files on Roblox's virtual pianos (ported from MIDI++): the
   61-key layout or all 88 keys, transpose, fitting out-of-range notes, sustain pedal, loudness keys,
-  human timing, speed, track mute / solo with drum tracks muted. It can also play a MIDI keyboard
-  into the game, as piano keys or MIDI Connect codes. Keys go only to the Roblox window, and a
+  human timing, speed, track mute / solo with drum tracks muted. Notes go in as piano keys or as
+  MIDI Connect codes, and it can play a MIDI keyboard into the game too. Keys go only to the Roblox
+  window, and a
   StreamController plugin can drive it.
 * **Rejoin and server hop:** rejoin the last server (even after a disconnect), hop to another
   server of the same game (any, the emptiest, or the best ping), or copy an invite link to the
@@ -242,6 +243,9 @@ it by its title bar; it snaps to the screen edges.
 
 * **Play / Pause** (or **F1**), a progress bar to drag through the song, **-10 s**, **Restart**,
   **+10 s** and **Speed** (0.25x to 2x).
+* **Send As:** **Piano Keys** (the Virtual Piano layout below) or **MIDI Connect**, for pianos
+  with a MIDI Connect option: each note, with its loudness, and the pedal go in as `*` and four
+  numpad digits, and the game plays them over its whole range. Applies to songs and the keyboard.
 * **Songs:** every `.mid` / `.midi` file in the songs folder and its sub-folders, with a search
   box. Click one to play it.
 * **Add Songs I Download:** while the game runs, a `.mid` file saved to your Downloads folder is
@@ -249,9 +253,10 @@ it by its title bar; it snaps to the screen edges.
 * **Tracks:** mute or solo each; drum tracks start muted.
 * **Keys and Timing:** **All 88 Keys** (Ctrl + key past the middle 61, as Virtual Piano does),
   **Fit Notes Into Range**, **Transpose**, **Sustain** (Space held with the pedal, or inverted),
-  **Loudness Keys** (Alt + key before notes) and **Human Timing**.
-* **MIDI Keyboard:** play a keyboard plugged into the computer into the game, as piano keys or as
-  MIDI Connect numpad codes for games that read those. Every keyboard found is used, ones plugged
+  **Loudness Keys** (Alt + key before notes) and **Human Timing**. With MIDI Connect only
+  Transpose and Human Timing apply.
+* **MIDI Keyboard:** play a keyboard plugged into the computer into the game, sent as chosen
+  above. Every keyboard found is used, ones plugged
   in later too (ALSA sequencer).
 
 Black keys are Shift + the white key below, the way Roblox pianos expect, with Shift (or Ctrl)

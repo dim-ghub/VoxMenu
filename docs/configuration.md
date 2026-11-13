@@ -202,7 +202,7 @@ one, in one pill; its own `x` and `y` then don't apply.
 | `piano_human` | float | `0` | Random timing of up to this many milliseconds. |
 | `piano_skip_drums` | boolean | `true` | Drum tracks (named like one, or on channel 10) start muted. |
 | `piano_live` | boolean | `false` | Play MIDI keyboards into the game. |
-| `piano_live_mode` | string | `"keys"` | `"keys"` (the piano layout) or `"midiconnect"` (`*` and four numpad digits per note). |
+| `piano_output` | string | `"keys"` | How notes from songs and the MIDI keyboard reach the game: `"keys"` (the piano layout) or `"midiconnect"` (`*` and four base-12 numpad digits per note and pedal message). |
 | `key_piano_play` | string | `"F1"` | Play / pause the song. |
 | `key_piano_back` | string | `"F2"` | 10 seconds back. |
 | `key_piano_forward` | string | `"F3"` | 10 seconds forward. |

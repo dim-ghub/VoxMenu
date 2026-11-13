@@ -124,9 +124,12 @@ struct Keys {
   std::array<int, 128> sounding;              // the note each MIDI note pressed, or -1
   bool space = false;                         // sustain
   int velocity_key = -1;                      // the last Alt+key loudness sent
+  std::array<int, 128> connect;               // MIDI Connect: the note sent for each, or -1
+  bool connect_pedal = false;
   Keys() {
     owner.fill(-1);
     sounding.fill(-1);
+    connect.fill(-1);
   }
 };
 Keys g_keys;
@@ -158,8 +161,35 @@ void SetLoudness(int velocity) {
   inject::Key(SDL_SCANCODE_LALT, false);
 }
 
+// MIDI Connect: games that read the keyboard's notes from the numpad take
+// "*" and four digits per message (base 12, with - and + as 10 and 11).
+void SendMidiConnect(int type, int value) {
+  static const SDL_Scancode kDigits[12] = {
+      SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3,
+      SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7,
+      SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9, SDL_SCANCODE_KP_MINUS, SDL_SCANCODE_KP_PLUS};
+  type = std::clamp(type, 0, 143);
+  value = std::clamp(value, 0, 143);
+  Tap(SDL_SCANCODE_KP_MULTIPLY);
+  Tap(kDigits[type / 12]);
+  Tap(kDigits[type % 12]);
+  Tap(kDigits[value / 12]);
+  Tap(kDigits[value % 12]);
+}
+
+bool MidiConnect(const Config& cfg) { return cfg.piano_output == "midiconnect"; }
+
 void Press(int note, int velocity, const Config& cfg) {
   if (note < 0 || note > 127) return;
+  if (MidiConnect(cfg)) {
+    // The game plays the note itself, over its whole range.
+    const int n = note + static_cast<int>(std::lround(cfg.piano_transpose));
+    if (n < 0 || n > 127) return;
+    if (g_keys.connect[note] >= 0) SendMidiConnect(g_keys.connect[note], 0);
+    SendMidiConnect(n, std::max(velocity, 1));
+    g_keys.connect[note] = n;
+    return;
+  }
   const int n = Target(note, cfg);
   Stroke s;
   if (n < 0 || !NoteStroke(n, cfg.piano_88, &s)) return;
@@ -179,6 +209,10 @@ void Press(int note, int velocity, const Config& cfg) {
 
 void Release(int note, const Config& cfg) {
   if (note < 0 || note > 127) return;
+  if (g_keys.connect[note] >= 0) {
+    SendMidiConnect(g_keys.connect[note], 0);
+    g_keys.connect[note] = -1;
+  }
   const int n = g_keys.sounding[note];
   g_keys.sounding[note] = -1;
   Stroke s;
@@ -187,7 +221,13 @@ void Release(int note, const Config& cfg) {
   g_keys.owner[s.key] = -1;
 }
 
-void Pedal(bool down, const Config& cfg) {
+void Pedal(bool down, int value, const Config& cfg) {
+  if (MidiConnect(cfg)) {
+    // MIDI Connect's pedal is message 143 with the pedal's value.
+    SendMidiConnect(143, value);
+    g_keys.connect_pedal = down;
+    return;
+  }
   if (cfg.piano_sustain != "pedal" && cfg.piano_sustain != "inverted") return;
   const bool want = cfg.piano_sustain == "pedal" ? down : !down;
   if (want == g_keys.space) return;
@@ -204,22 +244,12 @@ void ReleaseAll() {
   g_keys.sounding.fill(-1);
   if (g_keys.space) inject::Key(SDL_SCANCODE_SPACE, false);
   g_keys.space = false;
-}
-
-// MIDI Connect: games that read the keyboard's notes from the numpad take
-// "*" and four digits per message (base 12, with - and + as 10 and 11).
-void SendMidiConnect(int type, int value) {
-  static const SDL_Scancode kDigits[12] = {
-      SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3,
-      SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7,
-      SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9, SDL_SCANCODE_KP_MINUS, SDL_SCANCODE_KP_PLUS};
-  type = std::clamp(type, 0, 143);
-  value = std::clamp(value, 0, 143);
-  Tap(SDL_SCANCODE_KP_MULTIPLY);
-  Tap(kDigits[type / 12]);
-  Tap(kDigits[type % 12]);
-  Tap(kDigits[value / 12]);
-  Tap(kDigits[value % 12]);
+  for (int& n : g_keys.connect) {
+    if (n >= 0) SendMidiConnect(n, 0);
+    n = -1;
+  }
+  if (g_keys.connect_pedal) SendMidiConnect(143, 0);
+  g_keys.connect_pedal = false;
 }
 
 // --- Player ---------------------------------------------------------------------
@@ -288,7 +318,7 @@ bool TrackOn(int track) {
 }
 
 void Play(const midi::Event& e, const Config& cfg) {
-  if (e.note == midi::kSustain) Pedal(e.down, cfg);
+  if (e.note == midi::kSustain) Pedal(e.down, e.velocity, cfg);
   else if (e.down) Press(e.note, e.velocity, cfg);
   else Release(e.note, cfg);
 }
@@ -691,14 +721,14 @@ void Tick() {
     g_p.release = false;
     ReleaseAll();
   }
-  midi_input::Message m;
-  while (midi_input::Poll(&m)) {
-    if (cfg.piano_live_mode == "midiconnect") {
-      SendMidiConnect(m.note == midi::kSustain ? 143 : m.note, m.down || m.note == midi::kSustain ? m.velocity : 0);
-    } else {
-      Play({0, m.note, m.down, m.velocity, -1}, cfg);
-    }
+  // Switching between keys and MIDI Connect lets go of what the other held.
+  static std::string output;
+  if (cfg.piano_output != output) {
+    output = cfg.piano_output;
+    ReleaseAll();
   }
+  midi_input::Message m;
+  while (midi_input::Poll(&m)) Play({0, m.note, m.down, m.velocity, -1}, cfg);
   if (!g_p.song) return;
   if (cfg.piano_human != g_p.schedule_human) ScheduleLocked(cfg.piano_human, now);
   if (!g_p.playing) return;

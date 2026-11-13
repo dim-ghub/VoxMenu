@@ -259,6 +259,30 @@ int main() {
   piano::Stop();
   Check(!piano::GetStatus().playing && piano::GetStatus().position == 0, "stop goes back to the start");
 
+  // --- MIDI Connect: each note is * and four numpad digits (base 12) ---
+  cfg = GetConfig();
+  cfg.piano_transpose = 0;
+  cfg.piano_output = "midiconnect";
+  SetConfig(cfg);
+  g_events.clear();
+  piano::Restart();
+  Run(450);
+  std::vector<std::string> taps;
+  for (const std::string& e : g_events) {
+    if (e.rfind("down ", 0) == 0) taps.push_back(e.substr(5));
+  }
+  const std::vector<std::string> c4_on = {"Keypad *", "Keypad 5", "Keypad 0", "Keypad 8", "Keypad 4"};  // 60, 100
+  const std::vector<std::string> c4_off = {"Keypad *", "Keypad 5", "Keypad 0", "Keypad 0", "Keypad 0"};  // 60, 0
+  const std::vector<std::string> sharp_on = {"Keypad *", "Keypad 5", "Keypad 1", "Keypad 7", "Keypad 6"};  // 61, 90
+  Check(taps.size() >= 15 && std::vector<std::string>(taps.begin(), taps.begin() + 5) == c4_on, "C4 on");
+  Check(taps.size() >= 15 && std::vector<std::string>(taps.begin() + 5, taps.begin() + 10) == c4_off, "C4 off");
+  Check(taps.size() >= 15 && std::vector<std::string>(taps.begin() + 10, taps.begin() + 15) == sharp_on,
+        "C#4 on, with no Shift");
+  Check(Count("down T") == 0 && Count("down Left Shift +shift") == 0, "no piano keys");
+  Check(Count("down Keypad *") == 6, "A0 too: MIDI Connect isn't limited to 61 keys (3 notes, on and off)");
+  cfg.piano_output = "keys";
+  SetConfig(cfg);
+
   // --- Songs downloaded into Downloads move into the songs folder ---
   const std::string downloads = root + "/dl";
   std::system(("mkdir -p '" + downloads + "'").c_str());

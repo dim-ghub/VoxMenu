@@ -1033,6 +1033,10 @@ void PianoTab(Config& cfg) {
   } else {
     Hint(st.error.empty() ? "Pick a song. Keys go only to the Roblox window." : st.error.c_str());
   }
+  LabeledSegmented("Send as", &cfg.piano_output, {{"keys", "Piano keys"}, {"midiconnect", "MIDI Connect"}});
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("MIDI Connect: for pianos with a MIDI Connect option, which read notes from numpad codes.");
+  }
 
   // The songs folder, filtered by what's typed.
   const std::vector<std::string> songs = piano::Songs();
@@ -1105,15 +1109,21 @@ void PianoTab(Config& cfg) {
 
   Expander("Keys and timing", &g_piano_keys);
   if (g_piano_keys) {
-    Switch("All 88 keys", &cfg.piano_88);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: only the 61 keys without Ctrl, like most Roblox pianos.");
-    Switch("Fit notes into range", &cfg.piano_fold);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Notes past the keyboard move by octaves instead of being dropped.");
+    // MIDI Connect sends every note, its loudness and the pedal as they are.
+    const bool keys = cfg.piano_output != "midiconnect";
+    if (keys) {
+      Switch("All 88 keys", &cfg.piano_88);
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: only the 61 keys without Ctrl, like most Roblox pianos.");
+      Switch("Fit notes into range", &cfg.piano_fold);
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Notes past the keyboard move by octaves instead of being dropped.");
+    }
     ThinSlider("Transpose", &cfg.piano_transpose, -12, 12, "%+.0f");
     cfg.piano_transpose = std::round(cfg.piano_transpose);
-    LabeledSegmented("Sustain", &cfg.piano_sustain, {{"off", "Off"}, {"pedal", "Pedal"}, {"inverted", "Inverted"}});
-    Switch("Loudness keys (Alt)", &cfg.piano_velocity);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Presses Alt + a key before notes to set how loud they play.");
+    if (keys) {
+      LabeledSegmented("Sustain", &cfg.piano_sustain, {{"off", "Off"}, {"pedal", "Pedal"}, {"inverted", "Inverted"}});
+      Switch("Loudness keys (Alt)", &cfg.piano_velocity);
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Presses Alt + a key before notes to set how loud they play.");
+    }
     ThinSlider("Human timing", &cfg.piano_human, 0, 60, cfg.piano_human >= 1 ? "%.0f ms" : "off");
     if (cfg.piano_human < 1) cfg.piano_human = 0;
     cfg.piano_human = std::round(cfg.piano_human);
@@ -1123,7 +1133,6 @@ void PianoTab(Config& cfg) {
   Expander("MIDI keyboard", &g_piano_live);
   if (g_piano_live) {
     Switch("Play my MIDI keyboard", &cfg.piano_live);
-    LabeledSegmented("Send as", &cfg.piano_live_mode, {{"keys", "Piano keys"}, {"midiconnect", "MIDI Connect"}});
     if (!cfg.piano_live) {
       Hint("What you play on a connected keyboard goes to the game's piano.");
     } else if (!st.live_error.empty()) {

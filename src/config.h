@@ -110,7 +110,9 @@ struct Config {
   double piano_human = 0;             // random timing, up to this many ms; 0 = exact
   bool piano_skip_drums = true;       // drum tracks start muted
   bool piano_live = false;            // play a MIDI keyboard into the game
-  std::string piano_live_mode = "keys";  // "keys" or "midiconnect" (numpad codes)
+  // How notes reach the game, from songs and the MIDI keyboard: "keys" (the
+  // piano layout) or "midiconnect" (numpad codes the game turns back into notes)
+  std::string piano_output = "keys";
   std::string key_piano_play = "F1";
   std::string key_piano_back = "F2";     // 10 s back
   std::string key_piano_forward = "F3";  // 10 s forward
@@ -222,7 +224,7 @@ void Config::Visit(V&& v) {
   v("piano_human", piano_human);
   v("piano_skip_drums", piano_skip_drums);
   v("piano_live", piano_live);
-  v("piano_live_mode", piano_live_mode);
+  v("piano_output", piano_output);
   v("key_piano_play", key_piano_play);
   v("key_piano_back", key_piano_back);
   v("key_piano_forward", key_piano_forward);
