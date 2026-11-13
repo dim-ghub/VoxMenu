@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cfloat>
 #include <chrono>
 #include <cmath>
@@ -23,6 +24,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "netstats.h"
+#include "piano.h"
 #include "ui_internal.h"
 
 namespace nac::ui {
@@ -446,8 +448,11 @@ char g_name[64] = "";
 char g_key_buf[48] = "";
 char g_text_buf[256] = "";
 int g_buf_for = -2;  // the step g_key_buf / g_text_buf belong to
-int g_tool_tab = 0;  // 0 autoclicker, 1 macros
+int g_tool_tab = 0;  // 0 autoclicker, 1 macros, 2 piano
 bool g_more = false;  // the clicker's "random timing, limits, delay" section
+char g_song_filter[64] = "";
+bool g_piano_tracks = false, g_piano_keys = false, g_piano_live = false;  // the piano's sections
+double g_seek_to = -1;  // where the progress bar is being dragged, s
 
 bool OverMenuOrWindow() {
   ImGuiWindow* hovered = GImGui->HoveredWindow;
@@ -973,6 +978,159 @@ void MacrosTab(Config& cfg) {
   if (changed) automation::SetCurrent(g_macro);
 }
 
+std::string MinSec(double seconds) {
+  const int s = static_cast<int>(std::max(0.0, seconds));
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "%d:%02d", s / 60, s % 60);
+  return buf;
+}
+
+void PianoTab(Config& cfg) {
+  const piano::Status st = piano::GetStatus();
+  const float avail = ImGui::GetContentRegionAvail().x;
+  ImGui::BeginDisabled(!st.loaded);
+  if (ActionPill(st.playing ? "Pause" : "Play", st.playing, st.playing ? Accent() : Fill(), cfg.key_piano_play,
+                 avail)) {
+    piano::TogglePlay();
+  }
+  ImGui::EndDisabled();
+
+  // Now playing, with a progress bar to drag through the song.
+  if (st.loaded) {
+    ImGui::PushFont(g_fonts.ui_bold);
+    ImGui::TextUnformatted(st.song.c_str());
+    ImGui::PopFont();
+    const ImVec2 a = ImGui::GetCursorScreenPos();
+    const float h = S(20);
+    ImGui::InvisibleButton("progress", ImVec2(avail, h));
+    const float t_mouse = std::clamp((ImGui::GetIO().MousePos.x - a.x) / avail, 0.0f, 1.0f);
+    if (ImGui::IsItemActive()) g_seek_to = t_mouse * st.length;
+    if (ImGui::IsItemDeactivated() && g_seek_to >= 0) {
+      piano::SeekTo(g_seek_to);
+      g_seek_to = -1;
+    }
+    const double shown = g_seek_to >= 0 ? g_seek_to : st.position;
+    const float t = st.length > 0 ? static_cast<float>(std::clamp(shown / st.length, 0.0, 1.0)) : 0;
+    const float y = a.y + h / 2;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(ImVec2(a.x, y - S(2)), ImVec2(a.x + avail, y + S(2)), ChipFill(), S(2));
+    dl->AddRectFilled(ImVec2(a.x, y - S(2)), ImVec2(a.x + avail * t, y + S(2)), White(), S(2));
+    dl->AddCircleFilled(ImVec2(a.x + std::clamp(avail * t, S(6), avail - S(6)), y), S(6), White(), 16);
+    char times[64];
+    std::snprintf(times, sizeof(times), "%s / %s", MinSec(shown).c_str(), MinSec(st.length).c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, C4(179, 180, 182));
+    ImGui::TextUnformatted(times);
+    ImGui::PopStyleColor();
+
+    const float third = (avail - S(6) * 2) / 3;
+    if (Chip("-10 s", false, third)) piano::SeekBy(-10);
+    ImGui::SameLine(0, S(6));
+    if (Chip("Restart", false, third)) piano::Restart();
+    ImGui::SameLine(0, S(6));
+    if (Chip("+10 s", false, third)) piano::SeekBy(10);
+    double speed = st.speed;
+    if (ThinSlider("Speed", &speed, 0.25, 2.0, "%.2fx", true)) piano::SetSpeed(speed);
+  } else {
+    Hint(st.error.empty() ? "Pick a song. Keys go only to the Roblox window." : st.error.c_str());
+  }
+
+  // The songs folder, filtered by what's typed.
+  const std::vector<std::string> songs = piano::Songs();
+  char title[48];
+  std::snprintf(title, sizeof(title), "Songs (%zu)", songs.size());
+  Label(title);
+  ImGui::SetNextItemWidth(avail - S(86));
+  ImGui::InputTextWithHint("##song_filter", "Search", g_song_filter, sizeof(g_song_filter));
+  ImGui::SameLine(0, S(8));
+  if (Chip("Refresh", false, S(78))) piano::Rescan();
+  const std::string filter = [] {
+    std::string f = g_song_filter;
+    std::transform(f.begin(), f.end(), f.begin(), [](unsigned char c) { return std::tolower(c); });
+    return f;
+  }();
+  ImGui::BeginChild("songs", ImVec2(0, S(150)), ImGuiChildFlags_None);
+  int shown = 0;
+  for (size_t i = 0; i < songs.size(); ++i) {
+    if (!filter.empty()) {
+      std::string lower = songs[i];
+      std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+      if (lower.find(filter) == std::string::npos) continue;
+    }
+    ++shown;
+    const bool current = static_cast<int>(i) == st.index && st.loaded;
+    if (current) ImGui::PushStyleColor(ImGuiCol_Text, C4(1, 153, 237));
+    ImGui::PushID(static_cast<int>(i));
+    if (ImGui::Selectable(songs[i].c_str(), current)) piano::Load(static_cast<int>(i));
+    ImGui::PopID();
+    if (current) ImGui::PopStyleColor();
+  }
+  if (songs.empty()) {
+    Hint(("No .mid files in " + piano::SongsFolder()).c_str());
+  } else if (shown == 0) {
+    Hint("No songs match.");
+  }
+  ImGui::EndChild();
+
+  if (st.loaded && !st.tracks.empty()) {
+    char tracks[48];
+    std::snprintf(tracks, sizeof(tracks), "Tracks (%zu)", st.tracks.size());
+    Expander(tracks, &g_piano_tracks);
+    if (g_piano_tracks) {
+      const float chip = S(56);
+      for (size_t i = 0; i < st.tracks.size(); ++i) {
+        const piano::TrackStatus& t = st.tracks[i];
+        const ImVec2 a = ImGui::GetCursorScreenPos();
+        char name[96];
+        std::snprintf(name, sizeof(name), "%s%s", t.name.c_str(), t.drums ? " (drums)" : "");
+        ImGui::PushClipRect(a, ImVec2(a.x + avail - chip * 2 - S(16), a.y + S(32)), true);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(a.x, std::round(a.y + (S(32) - ImGui::GetFontSize()) / 2)),
+                                            t.muted ? C(140, 142, 146) : White(), name);
+        ImGui::PopClipRect();
+        ImGui::SetCursorScreenPos(ImVec2(a.x + avail - chip * 2 - S(6), a.y));
+        ImGui::PushID(static_cast<int>(i));
+        if (Chip("Mute", t.muted, chip)) piano::SetTrack(static_cast<int>(i), !t.muted, t.solo);
+        ImGui::SameLine(0, S(6));
+        if (Chip("Solo", t.solo, chip)) piano::SetTrack(static_cast<int>(i), t.muted, !t.solo);
+        ImGui::PopID();
+      }
+    }
+  }
+
+  Expander("Keys and timing", &g_piano_keys);
+  if (g_piano_keys) {
+    Switch("All 88 keys", &cfg.piano_88);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: only the 61 keys without Ctrl, like most Roblox pianos.");
+    Switch("Fit notes into range", &cfg.piano_fold);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Notes past the keyboard move by octaves instead of being dropped.");
+    ThinSlider("Transpose", &cfg.piano_transpose, -12, 12, "%+.0f");
+    cfg.piano_transpose = std::round(cfg.piano_transpose);
+    LabeledSegmented("Sustain", &cfg.piano_sustain, {{"off", "Off"}, {"pedal", "Pedal"}, {"inverted", "Inverted"}});
+    Switch("Loudness keys (Alt)", &cfg.piano_velocity);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Presses Alt + a key before notes to set how loud they play.");
+    ThinSlider("Human timing", &cfg.piano_human, 0, 60, cfg.piano_human >= 1 ? "%.0f ms" : "off");
+    if (cfg.piano_human < 1) cfg.piano_human = 0;
+    cfg.piano_human = std::round(cfg.piano_human);
+    Switch("Mute drum tracks", &cfg.piano_skip_drums);
+  }
+
+  Expander("MIDI keyboard", &g_piano_live);
+  if (g_piano_live) {
+    Switch("Play my MIDI keyboard", &cfg.piano_live);
+    LabeledSegmented("Send as", &cfg.piano_live_mode, {{"keys", "Piano keys"}, {"midiconnect", "MIDI Connect"}});
+    if (!cfg.piano_live) {
+      Hint("What you play on a connected keyboard goes to the game's piano.");
+    } else if (!st.live_error.empty()) {
+      Hint(st.live_error.c_str());
+    } else if (st.devices.empty()) {
+      Hint("Listening. No MIDI keyboard found yet.");
+    } else {
+      std::string names = "Listening to ";
+      for (size_t i = 0; i < st.devices.size(); ++i) names += (i ? ", " : "") + st.devices[i];
+      Hint(names.c_str());
+    }
+  }
+}
+
 // ImGui's own widgets in the window (fields, dropdowns, the step list) in
 // the same look: pill fields on #1F2025, white text.
 int PushToolStyle(const Config& cfg) {
@@ -1043,7 +1201,7 @@ void CountFrame() {
 bool HudVisible(const Config& cfg) {
   const automation::Status st = automation::GetStatus();
   return cfg.hud_fps.on || cfg.hud_ping.on || cfg.hud_server.on || cfg.hud_keys.on || cfg.tools_open ||
-         st.clicking || st.recording || st.playing || g_picking;
+         st.clicking || st.recording || st.playing || g_picking || piano::GetStatus().playing;
 }
 
 void CountVrFrame() {
@@ -1500,20 +1658,26 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
     // Tabs: chips in a dark track.
     {
       const ImVec2 a = ImGui::GetCursorScreenPos();
-      const float th = S(44), pad = S(4), tw = (avail - pad * 2 - S(6)) / 2;
+      const float th = S(44), pad = S(4), tw = (avail - pad * 2 - S(6) * 2) / 3;
       dl->AddRectFilled(a, ImVec2(a.x + avail, a.y + th), C(31, 32, 37), th / 2);
       ImGui::SetCursorScreenPos(ImVec2(a.x + pad, a.y + pad));
       if (Chip("Autoclicker", g_tool_tab == 0, tw, th - pad * 2)) g_tool_tab = 0;
       ImGui::SameLine(0, S(6));
       if (Chip("Macros", g_tool_tab == 1, tw, th - pad * 2)) g_tool_tab = 1;
+      ImGui::SameLine(0, S(6));
+      if (Chip("Piano", g_tool_tab == 2, tw, th - pad * 2)) g_tool_tab = 2;
       ImGui::SetCursorScreenPos(ImVec2(a.x, a.y + th + ImGui::GetStyle().ItemSpacing.y));
     }
 
     ImGui::PushItemWidth(-S(96));
     if (g_tool_tab == 0) ClickerTab(cfg);
-    else MacrosTab(cfg);
+    else if (g_tool_tab == 1) MacrosTab(cfg);
+    else PianoTab(cfg);
     ImGui::PopItemWidth();
-    if (GhostPill("Stop everything", avail, S(40))) automation::StopAll();
+    if (GhostPill("Stop everything", avail, S(40))) {
+      automation::StopAll();
+      piano::Stop();
+    }
     // Remember where it was left.
     const ImVec2 pos = window->Pos;
     const double fx = pos.x / screen.x, fy = pos.y / screen.y;
@@ -1533,7 +1697,8 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
 
 void DrawStatusBadge(const Config& cfg) {
   const automation::Status st = automation::GetStatus();
-  if (!st.clicking && !st.recording && !st.playing) return;
+  const piano::Status song = st.clicking || st.recording || st.playing ? piano::Status{} : piano::GetStatus();
+  if (!st.clicking && !st.recording && !st.playing && !song.playing) return;
   // A pill centred in the top-bar row: what runs, how far, and its hotkey.
   enum { kDot, kRing, kPlay } mark = kDot;
   ImU32 dot = Accent();
@@ -1551,6 +1716,11 @@ void DrawStatusBadge(const Config& cfg) {
     std::snprintf(buf, sizeof(buf), " step %d of %d", st.step, st.steps);
     detail = buf;
     key = cfg.key_macro;
+  } else if (song.playing) {
+    mark = kPlay;
+    title = "Piano";
+    detail = " " + MinSec(song.position) + " / " + MinSec(song.length);
+    key = cfg.key_piano_play;
   } else if (st.countdown > 0) {
     mark = kRing;
     title = "Autoclicker starts in";

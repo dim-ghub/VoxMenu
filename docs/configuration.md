@@ -187,6 +187,24 @@ one, in one pill; its own `x` and `y` then don't apply.
 | `key_macro` | string | `"F7"` | Play / stop the macro. |
 | `key_record` | string | `"F9"` | Start / stop recording. |
 
+### Piano
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `piano_folder` | string | `""` | Where the `.mid` files are (sub-folders included); empty is your Music folder (`XDG_MUSIC_DIR`). `~` is your home. |
+| `piano_88` | boolean | `true` | All 88 keys: notes below C2 and above C7 are Ctrl + key. Off: only the 61 keys from C2 to C7. |
+| `piano_fold` | boolean | `false` | Move notes past the keyboard by octaves until they fit, instead of dropping them. |
+| `piano_transpose` | float | `0` | Semitones up (or down, negative). |
+| `piano_sustain` | string | `"off"` | `"pedal"` holds Space while the song's sustain pedal is down, `"inverted"` while it's up, `"off"` ignores it. |
+| `piano_velocity` | boolean | `false` | Before notes, press Alt + one of 32 keys (`1`..`c`) for how loud they are. |
+| `piano_human` | float | `0` | Random timing of up to this many milliseconds. |
+| `piano_skip_drums` | boolean | `true` | Drum tracks (named like one, or on channel 10) start muted. |
+| `piano_live` | boolean | `false` | Play MIDI keyboards into the game. |
+| `piano_live_mode` | string | `"keys"` | `"keys"` (the piano layout) or `"midiconnect"` (`*` and four numpad digits per note). |
+| `key_piano_play` | string | `"F1"` | Play / pause the song. |
+| `key_piano_back` | string | `"F2"` | 10 seconds back. |
+| `key_piano_forward` | string | `"F3"` | 10 seconds forward. |
+
 ### Macro files
 
 One step per line; `#` starts a comment. Points are fractions of the window; leave them out to

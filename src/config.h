@@ -99,6 +99,21 @@ struct Config {
   double macro_speed = 1.0;        // playback speed multiplier
   bool macro_record_moves = false;  // record mouse movement, not just clicks
 
+  // Piano (MIDI player, piano.h)
+  std::string piano_folder;           // songs; empty = the Music folder
+  bool piano_88 = true;               // all 88 keys (Ctrl for the outer ones), not just 61
+  bool piano_fold = false;            // shift notes past the keyboard by octaves to fit
+  double piano_transpose = 0;         // semitones
+  std::string piano_sustain = "off";  // "off", "pedal" (Space while held) or "inverted"
+  bool piano_velocity = false;        // Alt+key to set the loudness of each note
+  double piano_human = 0;             // random timing, up to this many ms; 0 = exact
+  bool piano_skip_drums = true;       // drum tracks start muted
+  bool piano_live = false;            // play a MIDI keyboard into the game
+  std::string piano_live_mode = "keys";  // "keys" or "midiconnect" (numpad codes)
+  std::string key_piano_play = "F1";
+  std::string key_piano_back = "F2";     // 10 s back
+  std::string key_piano_forward = "F3";  // 10 s forward
+
   // Automation window and hotkeys
   // VR (headset) panel and stats
   std::string vr_stats = "view";        // "view": FPS / ping / server low in view; "off"
@@ -194,6 +209,20 @@ void Config::Visit(V&& v) {
   v("macro_repeat", macro_repeat);
   v("macro_speed", macro_speed);
   v("macro_record_moves", macro_record_moves);
+
+  v("piano_folder", piano_folder);
+  v("piano_88", piano_88);
+  v("piano_fold", piano_fold);
+  v("piano_transpose", piano_transpose);
+  v("piano_sustain", piano_sustain);
+  v("piano_velocity", piano_velocity);
+  v("piano_human", piano_human);
+  v("piano_skip_drums", piano_skip_drums);
+  v("piano_live", piano_live);
+  v("piano_live_mode", piano_live_mode);
+  v("key_piano_play", key_piano_play);
+  v("key_piano_back", key_piano_back);
+  v("key_piano_forward", key_piano_forward);
 
   v("vr_stats", vr_stats);
   v("vr_toggle", vr_toggle);

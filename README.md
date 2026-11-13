@@ -6,7 +6,8 @@
 
 An in-game menu for Roblox on Linux through [Nightcap](https://github.com/CoderDayton/nightcap): local
 text-to-speech into voice chat, movable HUD overlays (FPS, ping, server location, keystrokes),
-an autoclicker and macros, and rejoin / server hop / FPS cap controls. Styled like Roblox's own menu.
+an autoclicker and macros, a MIDI piano player, and rejoin / server hop / FPS cap controls. Styled like
+Roblox's own menu.
 
 Vox Menu (formerly Vox TTS and Nightcap AC) is one library, `libvox_menu.so`, loaded into an
 unmodified Nightcap. It needs no virtual audio cables, virtual microphone or separate app.
@@ -34,6 +35,11 @@ unmodified Nightcap. It needs no virtual audio cables, virtual microphone or sep
   Clicks go only to the Roblox window, and can leave your real cursor where it is.
 * **Macros:** record your keys, clicks, typed text and (optionally) mouse movement, edit the steps,
   and play them back once, a number of times or on a loop, at any speed. Saved as plain-text files.
+* **Piano player:** plays `.mid` files on Roblox's virtual pianos (ported from MIDI++): the
+  61-key layout or all 88 keys, transpose, fitting out-of-range notes, sustain pedal, loudness keys,
+  human timing, speed, track mute / solo with drum tracks muted. It can also play a MIDI keyboard
+  into the game, as piano keys or MIDI Connect codes. Keys go only to the Roblox window, and a
+  StreamController plugin can drive it.
 * **Rejoin and server hop:** rejoin the last server (even after a disconnect), hop to another
   server of the same game (any, the emptiest, or the best ping), or copy an invite link to the
   server you're in. Nightcap leaves and joins in place; nothing restarts.
@@ -52,6 +58,7 @@ All of it is in the in-game menu: press **F8** or click the top-bar button.
 * Nightcap's Vulkan renderer (the default), not OpenGL.
 * For TTS: `espeak-ng` (most distributions have it) and optionally `piper` for neural voices.
 * For server hop: `curl` (or Python 3) to read Roblox's server list.
+* For a MIDI keyboard: ALSA's `libasound` (almost always installed).
 * For sharing app audio: `pactl` and `parec` (`libpulse` / `pulseaudio-utils`), with PulseAudio or
   PipeWire's PulseAudio layer (`pipewire-pulse`).
 * To build: a C++17 compiler, SDL3, Vulkan and OpenXR headers (`sdl3`, `vulkan-headers`, `openxr`
@@ -170,7 +177,10 @@ Press **F8** or click the top-bar button to open the menu.
    * **Automation Window:** shows the floating autoclicker and macros window (below).
    * **Pause While This Menu Is Open:** no clicks or macro keys reach the game behind the menu.
    * **Hotkeys:** autoclicker on/off (**F6**), play/stop macro (**F7**), record macro (**F9**).
-     Each can be F1 to F12 (except F8), Insert, Home, End, Page Up/Down, Pause, or none.
+     Each can be F1 to F12 (except F8), Insert, Home, End, Page Up/Down, Pause, a mouse side
+     button, or none.
+   * **Piano:** opens the Piano tab, its hotkeys (play / pause **F1**, back 10 s **F2**, forward
+     10 s **F3**) and the **Songs Folder** (your Music folder unless set).
 
 6. **Settings:**
    * **Intercept Chat:** speak messages through TTS instead of sending them to Roblox's chat.
@@ -227,8 +237,33 @@ it by its title bar; it snaps to the screen edges.
   `~/.config/vox-menu/macros/`, one step per line (`key_down W`, `wait 120`,
   `click left 0.5 0.5`, `text gg`), so you can write them by hand too.
 
-**Stop Everything** stops the autoclicker, recording and playback, and releases any key or button
-they were holding.
+**Piano tab**
+
+* **Play / Pause** (or **F1**), a progress bar to drag through the song, **-10 s**, **Restart**,
+  **+10 s** and **Speed** (0.25x to 2x).
+* **Songs:** every `.mid` / `.midi` file in the songs folder and its sub-folders, with a search
+  box. Click one to play it.
+* **Tracks:** mute or solo each; drum tracks start muted.
+* **Keys and Timing:** **All 88 Keys** (Ctrl + key past the middle 61, as Virtual Piano does),
+  **Fit Notes Into Range**, **Transpose**, **Sustain** (Space held with the pedal, or inverted),
+  **Loudness Keys** (Alt + key before notes) and **Human Timing**.
+* **MIDI Keyboard:** play a keyboard plugged into the computer into the game, as piano keys or as
+  MIDI Connect numpad codes for games that read those. Every keyboard found is used, ones plugged
+  in later too (ALSA sequencer).
+
+Black keys are Shift + the white key below, the way Roblox pianos expect, with Shift (or Ctrl)
+held only around that key.
+
+**Stop Everything** stops the autoclicker, recording, macro and song playback, and releases any
+key or button they were holding.
+
+### StreamController
+
+The piano listens on `~/.vox-menu-piano.sock`, one command per connection, the same protocol as
+MIDI++'s: `PLAY_PAUSE`, `REWIND`, `SKIP`, `RESTART`, `STOP`, `SPEED_UP`, `SPEED_DOWN`,
+`GET_TIME` (JSON with `current`, `total`, `speed`, `paused` and `song`), `LIST_SONGS` (a JSON array
+of names) and `LOAD_SONG <index>`. The
+[MIDI++ StreamController plugin](https://github.com/dim-ghub/MidiPlusPlus-SD) drives it.
 
 ## How It Connects to Nightcap
 
@@ -247,8 +282,8 @@ touch Roblox's engine or game scripts:
   icons and bold Builder Sans, `#0199ED` for anything active. The window's **transparency** comes
   from Roblox's saved settings (`PreferredTransparency` in
   `GlobalBasicSettings_13.xml`), so it updates when Roblox saves them.
-* **Clicks, keys and macros** go into Nightcap's event queue, so they only ever reach the Roblox
-  window.
+* **Clicks, keys, macros and piano notes** go into Nightcap's event queue, so they only ever
+  reach the Roblox window. Nothing is typed system-wide (no uinput).
 
 See [Architecture & Internals](docs/architecture.md) for the details.
 

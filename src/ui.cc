@@ -19,6 +19,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "media.h"
+#include "piano.h"
 #include "roblox_settings.h"
 #include "servers.h"
 #include "icons.h"
@@ -620,6 +621,8 @@ char g_piper_model[512] = "";
 bool g_piper_model_loaded = false;
 char g_piper_dir[512] = "";
 bool g_piper_dir_loaded = false;
+char g_songs_dir[512] = "";
+bool g_songs_dir_loaded = false;
 
 template <typename T, typename F>
 std::vector<std::string> Labels(const std::vector<T>& items, F label) {
@@ -1039,7 +1042,38 @@ void AutomationPage(Config& cfg) {
     EndRow(row);
   }
 
+  Header("Piano");
+  row = BeginRow("Piano Player", "Plays MIDI files on Roblox pianos: open the Piano tab in the automation window");
+  if (ActionButton(row, cfg.tools_open ? "Window Open" : "Open Window")) cfg.tools_open = true;
+  EndRow(row);
+  HotkeyRow piano_keys[] = {
+      {"Play / Pause Song", "Starts or pauses the loaded song", &cfg.key_piano_play},
+      {"Back 10 Seconds", "Jumps back in the song", &cfg.key_piano_back},
+      {"Forward 10 Seconds", "Jumps ahead in the song", &cfg.key_piano_forward},
+  };
+  for (const HotkeyRow& h : piano_keys) {
+    int idx = IndexOf(keys, *h.value);
+    row = BeginRow(h.title, h.subtitle);
+    Picker(row, labels, &idx);
+    *h.value = keys[idx];
+    EndRow(row);
+  }
+  if (!g_songs_dir_loaded) {
+    std::snprintf(g_songs_dir, sizeof(g_songs_dir), "%s", cfg.piano_folder.c_str());
+    g_songs_dir_loaded = true;
+  }
+  row = BeginRow("Songs Folder", "Where your .mid files are; sub-folders are included");
+  bool done = false;
+  TextField(row, "##songs_dir", g_songs_dir, sizeof(g_songs_dir), "Default (your Music folder)", &done);
+  if (done) cfg.piano_folder = g_songs_dir;
+  EndRow(row);
+
   Header("Status");
+  const piano::Status song = piano::GetStatus();
+  row = BeginRow("Piano", song.playing ? ("Playing " + song.song).c_str() : song.loaded ? ("Paused: " + song.song).c_str()
+                                                                                     : "No song loaded");
+  StatusDot(row, song.playing);
+  EndRow(row);
   const automation::Status st = automation::GetStatus();
   char sub[96];
   std::snprintf(sub, sizeof(sub), st.clicking ? "Running, %d clicks so far" : "Stopped", st.clicks);

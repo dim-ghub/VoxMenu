@@ -73,7 +73,12 @@ The test framework includes dedicated C++ stand-ins to exercise the hooks and ov
      picking, and joining through a stand-in for Nightcap's launch broker (a real
      `MOCKTAIL-EXTERNAL-LAUNCH/1` socket).
 
-5. **`build/xr_driver` (`tests/xr_driver.cc`)**:
+5. **`build/piano_test` (`tests/piano_test.cc`)**:
+   - Unit tests the MIDI piano: file parsing (tempo, running status, note-on velocity 0, drum
+     tracks), the 61 / 88-key layout, the songs folder, playback order and modifiers, transpose,
+     pausing, seeking, speed and the control-socket commands, with input injection replaced by a log.
+
+6. **`build/xr_driver` (`tests/xr_driver.cc`)**:
    - Stands in for Nightcap's VR path: Vulkan made through the runtime, a session with the Vulkan
      binding, its own action set, and frames. `test_xr.py` runs it against Monado started headless
      (`XRT_COMPOSITOR_NULL=1`, a simulated headset, in a private runtime directory) and checks the
@@ -81,8 +86,8 @@ The test framework includes dedicated C++ stand-ins to exercise the hooks and ov
      controllers can't be pressed, so controller input is only covered by the unit tests of the
      panel geometry and bindings.
 
-6. **Python Test Suites (`tests/`)**:
-   - `test_inprocess.py`: Tests Vulkan overlay rendering, tab switching, keyboard selection, config migration, audio capture, the HUD overlays, the floating window's input routing, the autoclicker hotkey, layout-editor snapping, and the FPS cap.
+7. **Python Test Suites (`tests/`)**:
+   - `test_inprocess.py`: Tests Vulkan overlay rendering, tab switching, keyboard selection, config migration, audio capture, the HUD overlays, the floating window's input routing, the autoclicker hotkey, layout-editor snapping, the FPS cap, and a song played through the piano's control socket.
    - `test_launcher.py`: Tests the shell launcher, lock detection, and desktop patching.
    - `test_synth.py`: Tests the audio synthesizer math, pitch autocorrelation, RMS power, and duration scaling across styles.
 

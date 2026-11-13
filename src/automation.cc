@@ -637,20 +637,24 @@ bool HotkeyEvent(const Config& cfg, const std::function<bool(const std::string&)
 
 }  // namespace
 
+bool KeyMatches(const std::string& name, const SDL_KeyboardEvent& key) {
+  if (name == "off" || name.empty()) return false;
+  // By scancode or key, so it works whatever the keyboard layout reports.
+  const SDL_Scancode sc = SDL_GetScancodeFromName(name.c_str());
+  const SDL_Keycode code = SDL_GetKeyFromName(name.c_str());
+  return (sc != SDL_SCANCODE_UNKNOWN && key.scancode == sc) || (code != SDLK_UNKNOWN && key.key == code);
+}
+
+const char* SideButtonName(int sdl_button) {
+  return sdl_button == SDL_BUTTON_X1 ? "Mouse4" : sdl_button == SDL_BUTTON_X2 ? "Mouse5" : nullptr;
+}
+
 bool HandleHotkey(const SDL_KeyboardEvent& key) {
-  const Config cfg = GetConfig();
-  return HotkeyEvent(cfg, [&](const std::string& name) {
-    if (name == "off" || name.empty()) return false;
-    // By scancode or key, so it works whatever the keyboard layout reports.
-    const SDL_Scancode sc = SDL_GetScancodeFromName(name.c_str());
-    const SDL_Keycode code = SDL_GetKeyFromName(name.c_str());
-    return (sc != SDL_SCANCODE_UNKNOWN && key.scancode == sc) || (code != SDLK_UNKNOWN && key.key == code);
-  }, key.down, key.repeat);
+  return HotkeyEvent(GetConfig(), [&](const std::string& name) { return KeyMatches(name, key); }, key.down, key.repeat);
 }
 
 bool HandleHotkeyButton(int sdl_button, bool down) {
-  // The mouse's side buttons, "Mouse4" (back) and "Mouse5" (forward).
-  const char* name = sdl_button == SDL_BUTTON_X1 ? "Mouse4" : sdl_button == SDL_BUTTON_X2 ? "Mouse5" : nullptr;
+  const char* name = SideButtonName(sdl_button);
   if (name == nullptr) return false;
   return HotkeyEvent(GetConfig(), [&](const std::string& bound) { return bound == name; }, down, false);
 }

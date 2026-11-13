@@ -238,6 +238,10 @@ int main(int argc, char** argv) {
     SDL_Event e;
     const auto seen = [](const SDL_Event& e) {
       if (e.type == SDL_EVENT_KEY_DOWN) std::printf("game got key %u\n", static_cast<unsigned>(e.key.key));
+      if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) {
+        std::printf("game got scancode %u %s mod %u\n", static_cast<unsigned>(e.key.scancode),
+                    e.type == SDL_EVENT_KEY_DOWN ? "down" : "up", static_cast<unsigned>(e.key.mod));
+      }
       if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) std::printf("game got click\n");
     };
     if (peep) {

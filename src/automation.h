@@ -83,6 +83,10 @@ bool HandleHotkey(const SDL_KeyboardEvent& key);
 // The same for the mouse's side buttons (SDL_BUTTON_X1 / X2), which can be
 // hotkeys too ("Mouse4", "Mouse5").
 bool HandleHotkeyButton(int sdl_button, bool down);
+// Whether a key event is the hotkey named in the config ("F6", "off").
+bool KeyMatches(const std::string& name, const SDL_KeyboardEvent& key);
+// "Mouse4" / "Mouse5" for the side buttons, else nullptr.
+const char* SideButtonName(int sdl_button);
 // Player input that reaches the game, for recording.
 void Observe(const SDL_Event& event);
 

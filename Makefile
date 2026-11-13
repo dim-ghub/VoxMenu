@@ -47,7 +47,7 @@ build/vox-menu-render: tools/render.cc src/synth.cc src/synth.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -Wextra -o $@ tools/render.cc src/synth.cc -lm
 
-TEST_BINS := build/vk_driver build/mic_driver build/chat_test build/automation_test build/xr_driver
+TEST_BINS := build/vk_driver build/mic_driver build/chat_test build/automation_test build/piano_test build/xr_driver
 
 build/vk_driver: tests/vk_driver.cc
 	$(CXX) $(CXXFLAGS) -std=c++17 -o $@ $< $(SDL_CFLAGS) $(SDL_LIBS) -lvulkan
@@ -68,9 +68,16 @@ AUTOMATION_TEST_SRC := tests/automation_test.cc src/automation.cc src/config.cc 
 build/automation_test: $(AUTOMATION_TEST_SRC) $(wildcard src/*.h)
 	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -o $@ $(AUTOMATION_TEST_SRC) $(SDL_CFLAGS) $(SDL_LIBS) -ldl -lpthread
 
+PIANO_TEST_SRC := tests/piano_test.cc src/piano.cc src/midi_file.cc src/midi_input.cc \
+	$(filter-out tests/automation_test.cc,$(AUTOMATION_TEST_SRC))
+
+build/piano_test: $(PIANO_TEST_SRC) $(wildcard src/*.h)
+	$(CXX) $(CXXFLAGS) -std=c++17 -Wall -o $@ $(PIANO_TEST_SRC) $(SDL_CFLAGS) $(SDL_LIBS) -ldl -lpthread
+
 test: build $(TEST_BINS)
 	./build/chat_test
 	./build/automation_test
+	./build/piano_test
 	python3 -m unittest discover -s tests -v
 
 # --- install -------------------------------------------------------------------

@@ -76,7 +76,7 @@ void MouseMove(float x, float y) { Note("move %.0f %.0f", x, y); }
 void MouseButton(int button, bool down, float x, float y) {
   Note(down ? "down %.0f %.0f %.0f" : "up %.0f %.0f %.0f", button, x, y);
 }
-void Key(SDL_Scancode scancode, bool down) {
+void Key(SDL_Scancode scancode, bool down, SDL_Keymod) {
   g_events.push_back(std::string(down ? "key_down " : "key_up ") + SDL_GetScancodeName(scancode));
 }
 void Text(const std::string& utf8) { g_events.push_back("text " + utf8); }

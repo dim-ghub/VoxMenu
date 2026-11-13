@@ -140,6 +140,14 @@ When a user executes `vox-menu` from a terminal, application launcher, or `roblo
 - Recording observes the key, text, button (and optionally motion) events that reach the game, with the time between them as `wait` steps. Hotkey presses and clicks on the automation window never reach the game, so they are never recorded.
 - Stopping fires any queued releases and moves, drops queued presses, and releases every key and button still held.
 
+### The piano (`src/piano.cc`, `src/midi_file.cc`, `src/midi_input.cc`)
+
+- A ported MIDI++: `midi_file.cc` reads a standard MIDI file (format 0/1, tempo map, SMPTE timing) into one time-sorted list of note and sustain events, pairing note-offs with the latest note-on of that key and channel. Tracks named like drum kits, or played mostly on channel 10, are flagged.
+- Playback is ticked from the same main-thread event polls as the autoclicker, against a monotonic clock scaled by the speed, so notes land in the first poll at or after their time. Human timing jitters a copy of the schedule. Releases in a tick go before presses, so a repeated note is a fresh press.
+- Notes become Virtual Piano keys: the 36 white keys C2–C7 are `1234567890qwertyuiopasdfghjklzxcvbnm`, a black key is Shift + the white key below, and with 88 keys A0–B1 and C#7–C8 are Ctrl + key. Each key is injected with `inject::Key(scancode, down, mod)`: a Shift or Ctrl down event, the key with that modifier in its `mod` field (Nightcap derives the key from the scancode and modifiers), then the modifier's release. A key already held by another note (C4 and C#4 share `t`) is released first.
+- MIDI keyboards come through the ALSA sequencer, with `libasound` loaded at run time: a "Vox Menu" client subscribes to every readable port (rescanned every two seconds) and its thread queues notes for the next tick. MIDI Connect mode sends `*` and four base-12 numpad digits per message instead.
+- The control socket (`~/.vox-menu-piano.sock`, stream, one line in and one out per connection) speaks MIDI++'s protocol so its StreamController plugin works unchanged apart from the path.
+
 ---
 
 ## 5. Nightcap Host Integration (`src/nightcap.cc`, `src/gamestate.cc`, `src/servers.cc`)

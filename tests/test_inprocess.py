@@ -4,6 +4,8 @@ the Vulkan layer, input routing, and speech mixed into the microphone."""
 import json
 import math
 import os
+import socket
+import subprocess
 import time
 import struct
 import unittest
@@ -227,6 +229,49 @@ class HudAndAutomationTest(unittest.TestCase):
             tapped = r.stdout.count("game got click")
         self.assertGreaterEqual(held, 5)
         self.assertLess(tapped, held / 3)
+
+    def test_piano_plays_a_song_loaded_over_the_socket(self):
+        # C4 then C#4, 100 ms each, at 100 ticks a beat and 0.1 s a beat.
+        track = bytes([0x00, 0xFF, 0x51, 0x03, 0x01, 0x86, 0xA0,
+                       0x00, 0x90, 60, 100, 0x64, 0x80, 60, 0,
+                       0x00, 0x90, 61, 100, 0x64, 0x80, 61, 0,
+                       0x00, 0xFF, 0x2F, 0x00])
+        song = (b"MThd" + struct.pack(">IHHH", 6, 0, 1, 100) +
+                b"MTrk" + struct.pack(">I", len(track)) + track)
+        with tempdir() as t:
+            tmp = Path(t)
+            (tmp / "songs").mkdir()
+            (tmp / "songs" / "Scale.mid").write_bytes(song)
+            (tmp / "script").write_text("")
+            e = env_with_lib(tmp, json.dumps({"piano_folder": str(tmp / "songs"), "piano_88": False}), HOME=tmp)
+            p = subprocess.Popen([VK, "150", str(tmp / "script")], env=e, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, text=True)
+            sock_path = tmp / ".vox-menu-piano.sock"
+
+            def ask(command):
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                    s.connect(str(sock_path))
+                    s.sendall(command.encode() + b"\n")
+                    return s.recv(4096).decode().strip()
+
+            deadline = time.time() + 10
+            while not sock_path.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(ask("LIST_SONGS"), '["Scale"]')
+            self.assertEqual(ask("LOAD_SONG 0"), "OK")
+            self.assertIn('"song":"Scale"', ask("GET_TIME"))
+            out, err = p.communicate(timeout=60)
+            self.assertEqual(p.returncode, 0, err)
+            T, SHIFT, LSHIFT = 23, 1, 225  # SDL scancodes / KMOD_LSHIFT
+            lines = [l for l in out.splitlines() if l.startswith("game got scancode")]
+            self.assertEqual(lines[:6], [
+                f"game got scancode {T} down mod 0",           # C4: t
+                f"game got scancode {T} up mod 0",
+                f"game got scancode {LSHIFT} down mod {SHIFT}",  # C#4: Shift+t
+                f"game got scancode {T} down mod {SHIFT}",
+                f"game got scancode {LSHIFT} up mod 0",
+                f"game got scancode {T} up mod 0",
+            ])
 
     def test_layout_editor_drags_with_snapping(self):
         with tempdir() as t:

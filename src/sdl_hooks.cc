@@ -31,6 +31,7 @@
 #include "inject.h"
 #include "nightcap.h"
 #include "overlay.h"
+#include "piano.h"
 #include "servers.h"
 #include "speech.h"
 #include "vr_keyboard.h"
@@ -261,6 +262,8 @@ void MainThreadTick() {
   overlay::SetCursorFree(overlay::MenuOpen() || window == nullptr ||
                          !Real<bool (*)(SDL_Window*)>("SDL_GetWindowRelativeMouseMode")(window));
   automation::Tick();
+  piano::StartServer();
+  piano::Tick();
   std::string clip;
   if (servers::TakeClipboard(&clip)) SDL_SetClipboardText(clip.c_str());
   if (window == nullptr) return;
@@ -412,10 +415,12 @@ bool Filter(SDL_Event& e) {
     overlay::PushInput(in);
     return true;
   }
-  if (is_key && !overlay::WantsText() && automation::HandleHotkey(e.key)) return true;
-  if (is_button && !open && (e.button.button == SDL_BUTTON_X1 || e.button.button == SDL_BUTTON_X2) &&
-      automation::HandleHotkeyButton(e.button.button, e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
-    return true;
+  if (is_key && !overlay::WantsText() && (automation::HandleHotkey(e.key) || piano::HandleHotkey(e.key))) return true;
+  if (is_button && !open && (e.button.button == SDL_BUTTON_X1 || e.button.button == SDL_BUTTON_X2)) {
+    const bool down = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+    if (automation::HandleHotkeyButton(e.button.button, down) || piano::HandleHotkeyButton(e.button.button, down)) {
+      return true;
+    }
   }
   if (!open) {
     if (e.type == SDL_EVENT_MOUSE_MOTION) overlay::SetMousePos(e.motion.x, e.motion.y);
@@ -567,10 +572,10 @@ void MouseButton(int button, bool down, float x, float y) {
   g_injected_events.push_back(ev);
 }
 
-void Key(SDL_Scancode scancode, bool down) {
+void Key(SDL_Scancode scancode, bool down, SDL_Keymod mod) {
   std::lock_guard<std::mutex> lock(g_injected_mutex);
-  InjectKeyEvent(down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP, SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, false),
-                 scancode, SDL_KMOD_NONE, g_window_id);
+  InjectKeyEvent(down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP, SDL_GetKeyFromScancode(scancode, mod, false), scancode,
+                 mod, g_window_id);
 }
 
 void Text(const std::string& utf8) {
