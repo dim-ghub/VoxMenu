@@ -126,6 +126,7 @@ struct Config {
   std::string key_clicker_mode = "toggle";  // "toggle" or "hold" (clicks while held)
   std::string key_macro = "F7";
   std::string key_record = "F9";
+  std::string key_tools = "F4";  // show / hide the automation window
 
   bool uses_vc() const { return output == "vc" || output == "both"; }
   bool uses_local() const { return output == "local" || output == "both"; }
@@ -234,6 +235,7 @@ void Config::Visit(V&& v) {
   v("key_clicker_mode", key_clicker_mode);
   v("key_macro", key_macro);
   v("key_record", key_record);
+  v("key_tools", key_tools);
 }
 
 inline bool operator==(const Config& a, const Config& b) { return a.ToJson() == b.ToJson(); }

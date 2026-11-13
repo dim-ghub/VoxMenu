@@ -186,6 +186,7 @@ one, in one pill; its own `x` and `y` then don't apply.
 | `key_clicker_mode` | string | `"toggle"` | `"toggle"` (press to start, press again to stop) or `"hold"` (clicks only while the key is held). |
 | `key_macro` | string | `"F7"` | Play / stop the macro. |
 | `key_record` | string | `"F9"` | Start / stop recording. |
+| `key_tools` | string | `"F4"` | Show / hide the automation window. |
 
 ### Piano
 

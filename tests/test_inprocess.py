@@ -230,6 +230,20 @@ class HudAndAutomationTest(unittest.TestCase):
         self.assertGreaterEqual(held, 5)
         self.assertLess(tapped, held / 3)
 
+    def test_hotkey_shows_and_hides_the_automation_window(self):
+        F4 = "0x4000003d"
+        with tempdir() as t:
+            tmp = Path(t)
+            r, shown = vk_cfg(tmp, f"10 key {F4}\n", {})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("game got key 1073741885", r.stdout, "F4 is kept from the game")
+            self.assertTrue(saved_config(tmp)["tools_open"])
+            self.assertNotEqual(pixel(shown, 908, 300), GAME, "the window is drawn")
+        with tempdir() as t:
+            tmp = Path(t)
+            vk_cfg(tmp, f"10 key {F4}\n", {"tools_open": True})
+            self.assertFalse(saved_config(tmp)["tools_open"], "pressed again, it's gone")
+
     def test_piano_plays_a_song_loaded_over_the_socket(self):
         # C4 then C#4, 100 ms each, at 100 ticks a beat and 0.1 s a beat.
         track = bytes([0x00, 0xFF, 0x51, 0x03, 0x01, 0x86, 0xA0,

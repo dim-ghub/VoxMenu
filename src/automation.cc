@@ -51,6 +51,7 @@ std::atomic<int> g_hold_clicker{0};  // 1 start, -1 stop
 std::atomic<bool> g_toggle_recording{false};
 std::atomic<bool> g_toggle_playback{false};
 std::atomic<bool> g_stop_all{false};
+std::atomic<bool> g_toggle_window{false};
 
 // --- Main thread only ------------------------------------------------------------
 
@@ -559,6 +560,9 @@ void ToggleRecording() { g_toggle_recording = true; }
 void TogglePlayback() { g_toggle_playback = true; }
 void StopAll() { g_stop_all = true; }
 
+void ToggleWindow() { g_toggle_window = true; }
+bool TakeWindowToggle() { return g_toggle_window.exchange(false); }
+
 void Tick() {
   const Config cfg = GetConfig();
   if (g_stop_all.exchange(false)) {
@@ -630,6 +634,7 @@ bool HotkeyEvent(const Config& cfg, const std::function<bool(const std::string&)
   if (is(cfg.key_clicker)) action = ToggleClicker;
   else if (is(cfg.key_macro)) action = TogglePlayback;
   else if (is(cfg.key_record)) action = ToggleRecording;
+  else if (is(cfg.key_tools)) action = ToggleWindow;
   if (action == nullptr) return false;
   if (down && !repeat) action();
   return true;

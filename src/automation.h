@@ -73,6 +73,10 @@ void HoldClicker(bool down);
 void ToggleRecording();
 void TogglePlayback();
 void StopAll();
+// The window hotkey: the menu's draw applies it to the config it holds,
+// so the toggle can't be lost to a frame that saves its own copy.
+void ToggleWindow();
+bool TakeWindowToggle();
 
 // --- Main thread ----------------------------------------------------------------
 

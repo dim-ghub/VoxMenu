@@ -176,7 +176,8 @@ Press **F8** or click the top-bar button to open the menu.
 5. **Automation:**
    * **Automation Window:** shows the floating autoclicker and macros window (below).
    * **Pause While This Menu Is Open:** no clicks or macro keys reach the game behind the menu.
-   * **Hotkeys:** autoclicker on/off (**F6**), play/stop macro (**F7**), record macro (**F9**).
+   * **Hotkeys:** autoclicker on/off (**F6**), play/stop macro (**F7**), record macro (**F9**),
+     show / hide the automation window (**F4**).
      Each can be F1 to F12 (except F8), Insert, Home, End, Page Up/Down, Pause, a mouse side
      button, or none.
    * **Piano:** opens the Piano tab, its hotkeys (play / pause **F1**, back 10 s **F2**, forward

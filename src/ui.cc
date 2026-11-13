@@ -1025,6 +1025,7 @@ void AutomationPage(Config& cfg) {
       {"Autoclicker On / Off", "Starts and stops clicking", &cfg.key_clicker},
       {"Play / Stop Macro", "Plays the macro loaded in the window", &cfg.key_macro},
       {"Record Macro", "Records your keys and clicks until pressed again", &cfg.key_record},
+      {"Show / Hide Automation Window", "Opens or closes the floating window while you play", &cfg.key_tools},
   };
   for (const HotkeyRow& h : hotkeys) {
     int idx = IndexOf(keys, *h.value);
@@ -1523,6 +1524,7 @@ bool Draw(float px, bool srgb) {
   const bool closing = !open && Closing();
   Config cfg = GetConfig();
   const Config before = cfg;
+  if (automation::TakeWindowToggle()) cfg.tools_open = !cfg.tools_open;
   if (g_blur) {
     g_blur = false;
     ImGui::ClearActiveID();
