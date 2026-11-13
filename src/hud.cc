@@ -665,6 +665,10 @@ void ClickerTab(Config& cfg) {
     std::snprintf(note, sizeof(note), "Starting in %.1f s", st.countdown);
   } else if (st.clicking) {
     std::snprintf(note, sizeof(note), "%d clicks \xC2\xB7 %.1f s", st.clicks, st.elapsed);
+  } else if (cfg.key_clicker_mode == "hold" && cfg.key_clicker != "off") {
+    std::snprintf(note, sizeof(note), "Hold %s to click",
+                  cfg.key_clicker == "Mouse4" ? "Mouse Back" : cfg.key_clicker == "Mouse5" ? "Mouse Forward"
+                                                                                           : cfg.key_clicker.c_str());
   } else {
     std::snprintf(note, sizeof(note), "Clicks go only to the Roblox window");
   }
@@ -674,6 +678,7 @@ void ClickerTab(Config& cfg) {
   ImGui::TextUnformatted(note);
   ImGui::PopStyleColor();
 
+  LabeledSegmented("Hotkey", &cfg.key_clicker_mode, {{"toggle", "Press to toggle"}, {"hold", "Hold to click"}});
   LabeledSegmented("Button", &cfg.click_button, {{"left", "Left"}, {"right", "Right"}, {"middle", "Middle"}});
   LabeledSegmented("Click", &cfg.click_type, {{"single", "Single"}, {"double", "Double"}, {"hold", "Hold"}});
   if (cfg.click_type != "hold") ThinSlider("Speed", &cfg.click_cps, 1, 100, "%.1f clicks/s", true);

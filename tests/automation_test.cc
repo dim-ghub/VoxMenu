@@ -165,6 +165,51 @@ int main() {
   Check(automation::GetStatus().clicking, "F6 started it");
   f6.down = false;
   Check(automation::HandleHotkey(f6), "its release is ours too");
+  automation::StopAll();
+  Run(10);
+
+  // --- Hold-to-click hotkey ---
+  cfg.key_clicker_mode = "hold";
+  SetConfig(cfg);
+  f6.down = true;
+  Check(automation::HandleHotkey(f6), "F6 is still ours in hold mode");
+  Run(10);
+  Check(automation::GetStatus().clicking, "holding F6 clicks");
+  f6.repeat = true;
+  automation::HandleHotkey(f6);
+  Run(10);
+  Check(automation::GetStatus().clicking, "key repeat doesn't toggle it");
+  f6.repeat = false;
+  f6.down = false;
+  automation::HandleHotkey(f6);
+  Run(10);
+  Check(!automation::GetStatus().clicking, "releasing F6 stops it");
+
+  // A side mouse button as the hold key.
+  cfg.key_clicker = "Mouse4";
+  SetConfig(cfg);
+  Check(automation::HandleHotkeyButton(SDL_BUTTON_X1, true), "Mouse Back is ours when bound");
+  Run(10);
+  Check(automation::GetStatus().clicking, "holding Mouse Back clicks");
+  Check(automation::HandleHotkeyButton(SDL_BUTTON_X1, false), "its release too");
+  Run(10);
+  Check(!automation::GetStatus().clicking, "letting go stops it");
+  Check(!automation::HandleHotkeyButton(SDL_BUTTON_X2, true), "Mouse Forward isn't bound: the game gets it");
+
+  // Holding, then alt-tabbing away: the release never comes, so losing
+  // focus stops it.
+  automation::HandleHotkeyButton(SDL_BUTTON_X1, true);
+  Run(10);
+  overlay::SetWindowFocused(false);
+  Run(10);
+  Check(!automation::GetStatus().clicking, "a held clicker stops when Roblox loses focus");
+  overlay::SetWindowFocused(true);
+  automation::HandleHotkeyButton(SDL_BUTTON_X1, false);
+  Run(10);
+  cfg.key_clicker = "F6";
+  cfg.key_clicker_mode = "toggle";
+  SetConfig(cfg);
+
   SDL_KeyboardEvent w{};
   w.scancode = SDL_SCANCODE_W;
   w.down = true;

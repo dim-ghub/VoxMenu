@@ -108,6 +108,7 @@ struct Config {
   double tools_x = 0.706, tools_y = 0.094;  // window's top-left: top right, under the top bar
   bool pause_in_menu = true;              // no clicks while this menu is open
   std::string key_clicker = "F6";
+  std::string key_clicker_mode = "toggle";  // "toggle" or "hold" (clicks while held)
   std::string key_macro = "F7";
   std::string key_record = "F9";
 
@@ -201,6 +202,7 @@ void Config::Visit(V&& v) {
   v("tools_y", tools_y);
   v("pause_in_menu", pause_in_menu);
   v("key_clicker", key_clicker);
+  v("key_clicker_mode", key_clicker_mode);
   v("key_macro", key_macro);
   v("key_record", key_record);
 }

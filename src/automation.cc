@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <random>
 #include <set>
@@ -46,6 +47,7 @@ int g_revision = 0;
 Status g_status;
 
 std::atomic<bool> g_toggle_clicker{false};
+std::atomic<int> g_hold_clicker{0};  // 1 start, -1 stop
 std::atomic<bool> g_toggle_recording{false};
 std::atomic<bool> g_toggle_playback{false};
 std::atomic<bool> g_stop_all{false};
@@ -129,6 +131,7 @@ struct Clicker {
   int clicks = 0;
   size_t point = 0;
   bool holding = false;
+  bool held = false;  // started by holding the hotkey
 } g_clicker;
 
 // Where the next click lands, in window coordinates.
@@ -551,6 +554,7 @@ Status GetStatus() {
 }
 
 void ToggleClicker() { g_toggle_clicker = true; }
+void HoldClicker(bool down) { g_hold_clicker = down ? 1 : -1; }
 void ToggleRecording() { g_toggle_recording = true; }
 void TogglePlayback() { g_toggle_playback = true; }
 void StopAll() { g_stop_all = true; }
@@ -566,6 +570,18 @@ void Tick() {
     if (g_clicker.on) StopClicker();
     else StartClicker(cfg);
   }
+  switch (g_hold_clicker.exchange(0)) {
+    case 1:
+      if (!g_clicker.on) StartClicker(cfg);
+      g_clicker.held = true;
+      break;
+    case -1:
+      StopClicker();
+      break;
+  }
+  // A release that went to another window (alt-tab while holding) never
+  // arrives: a held clicker stops when Roblox loses focus.
+  if (g_clicker.on && g_clicker.held && !overlay::WindowFocused()) StopClicker();
   if (g_toggle_recording.exchange(false)) {
     if (g_rec.on) {
       StopRecording();
@@ -601,22 +617,42 @@ void Tick() {
   g_status = st;
 }
 
-bool HandleHotkey(const SDL_KeyboardEvent& key) {
-  const Config cfg = GetConfig();
-  auto is = [&](const std::string& name) {
-    if (name == "off" || name.empty()) return false;
-    // By scancode or key, so it works whatever the keyboard layout reports.
-    const SDL_Scancode sc = SDL_GetScancodeFromName(name.c_str());
-    const SDL_Keycode code = SDL_GetKeyFromName(name.c_str());
-    return (sc != SDL_SCANCODE_UNKNOWN && key.scancode == sc) || (code != SDLK_UNKNOWN && key.key == code);
-  };
+namespace {
+
+// One press or release of whatever a hotkey name matched: true when it's
+// one of ours (and must not reach the game).
+bool HotkeyEvent(const Config& cfg, const std::function<bool(const std::string&)>& is, bool down, bool repeat) {
+  if (is(cfg.key_clicker) && cfg.key_clicker_mode == "hold") {
+    if (!repeat) HoldClicker(down);
+    return true;
+  }
   void (*action)() = nullptr;
   if (is(cfg.key_clicker)) action = ToggleClicker;
   else if (is(cfg.key_macro)) action = TogglePlayback;
   else if (is(cfg.key_record)) action = ToggleRecording;
   if (action == nullptr) return false;
-  if (key.down && !key.repeat) action();
+  if (down && !repeat) action();
   return true;
+}
+
+}  // namespace
+
+bool HandleHotkey(const SDL_KeyboardEvent& key) {
+  const Config cfg = GetConfig();
+  return HotkeyEvent(cfg, [&](const std::string& name) {
+    if (name == "off" || name.empty()) return false;
+    // By scancode or key, so it works whatever the keyboard layout reports.
+    const SDL_Scancode sc = SDL_GetScancodeFromName(name.c_str());
+    const SDL_Keycode code = SDL_GetKeyFromName(name.c_str());
+    return (sc != SDL_SCANCODE_UNKNOWN && key.scancode == sc) || (code != SDLK_UNKNOWN && key.key == code);
+  }, key.down, key.repeat);
+}
+
+bool HandleHotkeyButton(int sdl_button, bool down) {
+  // The mouse's side buttons, "Mouse4" (back) and "Mouse5" (forward).
+  const char* name = sdl_button == SDL_BUTTON_X1 ? "Mouse4" : sdl_button == SDL_BUTTON_X2 ? "Mouse5" : nullptr;
+  if (name == nullptr) return false;
+  return HotkeyEvent(GetConfig(), [&](const std::string& bound) { return bound == name; }, down, false);
 }
 
 void Observe(const SDL_Event& e) {

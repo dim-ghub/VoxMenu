@@ -1011,10 +1011,13 @@ void AutomationPage(Config& cfg) {
   EndRow(row);
 
   Header("Hotkeys");
-  const std::vector<std::string> keys = {"off", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F9", "F10",
-                                          "F11", "F12", "Insert", "Home", "End", "PageUp", "PageDown", "Pause"};
+  const std::vector<std::string> keys = {"off", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F9", "F10", "F11",
+                                          "F12", "Insert", "Home", "End", "PageUp", "PageDown", "Pause",
+                                          "Mouse4", "Mouse5"};
   std::vector<std::string> labels = keys;
   labels[0] = "None";
+  labels[labels.size() - 2] = "Mouse Back Button";
+  labels[labels.size() - 1] = "Mouse Forward Button";
   struct HotkeyRow { const char* title; const char* subtitle; std::string* value; } hotkeys[] = {
       {"Autoclicker On / Off", "Starts and stops clicking", &cfg.key_clicker},
       {"Play / Stop Macro", "Plays the macro loaded in the window", &cfg.key_macro},
@@ -1025,6 +1028,14 @@ void AutomationPage(Config& cfg) {
     row = BeginRow(h.title, h.subtitle);
     Picker(row, labels, &idx);
     *h.value = keys[idx];
+    EndRow(row);
+  }
+  {
+    const std::vector<std::string> modes = {"toggle", "hold"};
+    int idx = IndexOf(modes, cfg.key_clicker_mode);
+    row = BeginRow("Autoclicker Hotkey Mode", "Press to toggle, or click only while the key is held down");
+    Picker(row, {"Toggle", "Hold"}, &idx);
+    cfg.key_clicker_mode = modes[idx];
     EndRow(row);
   }
 

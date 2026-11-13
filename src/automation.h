@@ -68,6 +68,8 @@ Status GetStatus();
 
 // From any thread; carried out on the main thread.
 void ToggleClicker();
+// Hold-to-click: starts on true, stops on false.
+void HoldClicker(bool down);
 void ToggleRecording();
 void TogglePlayback();
 void StopAll();
@@ -78,6 +80,9 @@ void StopAll();
 void Tick();
 // One of the automation hotkeys: true when it must not reach the game.
 bool HandleHotkey(const SDL_KeyboardEvent& key);
+// The same for the mouse's side buttons (SDL_BUTTON_X1 / X2), which can be
+// hotkeys too ("Mouse4", "Mouse5").
+bool HandleHotkeyButton(int sdl_button, bool down);
 // Player input that reaches the game, for recording.
 void Observe(const SDL_Event& event);
 

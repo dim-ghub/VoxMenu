@@ -183,6 +183,7 @@ one, in one pill; its own `x` and `y` then don't apply.
 | `tools_x`, `tools_y` | float | `0.706`, `0.094` | Where the window's top-left corner is, as fractions of the screen. |
 | `pause_in_menu` | boolean | `true` | No clicks or macro input while the menu is open. |
 | `key_clicker` | string | `"F6"` | Autoclicker on/off. An SDL key name, or `"off"`. |
+| `key_clicker_mode` | string | `"toggle"` | `"toggle"` (press to start, press again to stop) or `"hold"` (clicks only while the key is held). |
 | `key_macro` | string | `"F7"` | Play / stop the macro. |
 | `key_record` | string | `"F9"` | Start / stop recording. |
 
