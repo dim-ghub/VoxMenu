@@ -1609,7 +1609,13 @@ bool DrawVr(float px, bool srgb, bool panel_open, float* stats_w) {
   g_dl = ImGui::GetWindowDrawList();
   if (panel_open) {
     g_editing = false;
+    // Rows take their IDs from the nav counter, so it must start from zero
+    // every frame (the desktop does that in UpdateNav), or no click lands.
+    // The headset gets its own, leaving the desktop menu's selection alone.
+    const Nav desktop_nav = g_nav;
+    g_nav = Nav{};
     DrawMenu(cfg, S(kVrPanelW), S(kVrPanelH), false);
+    g_nav = desktop_nav;
     // Where the controller points: a blue dot with a white ring.
     const ImVec2 m = io.MousePos;
     if (m.x >= 0 && m.y >= 0 && m.x < S(kVrPanelW) && m.y < S(kVrPanelH)) {

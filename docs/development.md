@@ -102,6 +102,7 @@ Vox Menu provides several environment variables for diagnostic output and inspec
 
 | `VOX_MENU_VR_OPEN=1` | Opens the headset panel on the first VR frame. |
 | `VOX_MENU_VR_DUMP=/path/to/panel.ppm` | Saves the headset panel's texture (the `VOX_MENU_VR_DUMP_FRAME`-th rendered, default 10th), transparent parts over dark grey. |
+| `VOX_MENU_VR_CLICKS="x,y,down,up;..."` | Scripted pointing on the headset panel (texture pixels): the trigger is held from frame `down` to `up`. For tests, where simulated controllers can't be pressed. |
 | `DISABLE_VOX_MENU_XR_LAYER=1` | Turns the OpenXR (headset) layer off. |
 
 The older `VOX_TTS_*` and `NIGHTCAP_AC_*` names still work. `DISABLE_VOX_MENU_LAYER=1` turns the overlay layer off.

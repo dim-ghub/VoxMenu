@@ -27,6 +27,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -137,6 +138,7 @@ struct Session {
   bool was_down = false;
   int frames = 0;             // since the last stats-only render
   bool rendered = false;      // the swapchain holds an image
+  int frame_no = 0;           // frames ended, for scripted clicks
   float stats_w = 0;          // the stats pill's width when last rendered, px
 } g_session;
 
@@ -382,6 +384,20 @@ void Frame(const XrFrameEndInfo* info, std::vector<const XrCompositionLayerBaseH
         pointer.down = OurFloat(g_actions.trigger, h) > 0.6f;
         const float stick = OurFloat(g_actions.scroll, h);
         if (std::fabs(stick) > 0.3f) pointer.wheel = stick * 0.25f;
+      }
+    }
+  }
+
+  // Debugging: VOX_MENU_VR_CLICKS="x,y,down,up;..." points at x, y (panel
+  // pixels) from two frames before `down` to two after `up`, with the
+  // trigger held from frame `down` until `up`.
+  ++s.frame_no;
+  if (const char* clicks = Env("VR_CLICKS")) {
+    for (const char* at = clicks; at && *at; at = std::strchr(at, ';') ? std::strchr(at, ';') + 1 : nullptr) {
+      float x, y;
+      int down, up;
+      if (std::sscanf(at, "%f,%f,%d,%d", &x, &y, &down, &up) == 4 && s.frame_no >= down - 2 && s.frame_no <= up + 2) {
+        pointer = {true, x, y, s.frame_no >= down && s.frame_no < up, 0};
       }
     }
   }

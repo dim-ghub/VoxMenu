@@ -70,6 +70,19 @@ class HeadsetTest(unittest.TestCase):
             self.assertGreater(sum(pixel(img, 150, 87)), 600, "TTS tab underlined")
             self.assertNotIn("game trigger: 1", r.stdout)
 
+    def test_panel_controls_respond_to_the_trigger(self):
+        with tempdir() as t:
+            tmp = Path(t)
+            # Point and pull the trigger (scripted: Monado's simulated
+            # controllers can't be pressed) on two rows of the TTS tab: the
+            # On/Off of "Speak My Chat Messages", then Speech Engine's ›.
+            r, _ = self.run_xr(tmp, {}, frames=50, VOX_MENU_VR_OPEN=1,
+                               VOX_MENU_VR_CLICKS="1206,208,20,24;1206,316,32,36")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            cfg = json.loads((tmp / "cfg/vox-menu/config.json").read_text())
+            self.assertFalse(cfg["enabled"], "the switch turned it off")
+            self.assertEqual(cfg["engine"], "animalese", "the picker moved on from eSpeak-NG")
+
     def test_stats_without_the_menu(self):
         with tempdir() as t:
             r, img = self.run_xr(Path(t), {"hud_fps_on": True, "hud_ping_on": True}, frames=30,
