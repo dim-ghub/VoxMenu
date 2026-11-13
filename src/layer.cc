@@ -984,6 +984,9 @@ bool Render(Target* t, uint32_t index, bool panel_open, const Pointer& pointer, 
       init.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
       t->backend_ready = ImGui_ImplVulkan_Init(&init);
       if (!t->backend_ready) Log("headset panel: ImGui Vulkan init failed");
+      // A new context has an empty atlas, but the headset's saved fonts still
+      // point into the last session's (freed) one at the same scale: rebuild.
+      ui::ResetFonts();
     }
     if (t->backend_ready) {
       const float px = t->extent.width / ui::kVrPanelW;
