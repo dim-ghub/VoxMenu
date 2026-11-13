@@ -244,6 +244,8 @@ it by its title bar; it snaps to the screen edges.
   **+10 s** and **Speed** (0.25x to 2x).
 * **Songs:** every `.mid` / `.midi` file in the songs folder and its sub-folders, with a search
   box. Click one to play it.
+* **Add Songs I Download:** while the game runs, a `.mid` file saved to your Downloads folder is
+  moved into the songs folder and shows up in the list (on by default).
 * **Tracks:** mute or solo each; drum tracks start muted.
 * **Keys and Timing:** **All 88 Keys** (Ctrl + key past the middle 61, as Virtual Piano does),
   **Fit Notes Into Range**, **Transpose**, **Sustain** (Space held with the pedal, or inverted),

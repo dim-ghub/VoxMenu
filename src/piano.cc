@@ -1,5 +1,7 @@
 #include "piano.h"
 
+#include <poll.h>
+#include <sys/inotify.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -47,19 +49,21 @@ std::string Home() {
   return home ? home : "";
 }
 
-// $XDG_MUSIC_DIR from user-dirs.dirs, as xdg-user-dir reports it.
-std::string MusicDir() {
+// An XDG user folder ("MUSIC", "DOWNLOAD") from user-dirs.dirs, as
+// xdg-user-dir reports it.
+std::string UserDir(const std::string& name, const char* fallback) {
   const char* xdg = std::getenv("XDG_CONFIG_HOME");
   std::ifstream in(((xdg && *xdg) ? std::string(xdg) : Home() + "/.config") + "/user-dirs.dirs");
+  const std::string key = "XDG_" + name + "_DIR=";
   std::string line;
   while (std::getline(in, line)) {
-    if (line.rfind("XDG_MUSIC_DIR=", 0) != 0) continue;
-    std::string v = line.substr(14);
+    if (line.rfind(key, 0) != 0) continue;
+    std::string v = line.substr(key.size());
     if (v.size() >= 2 && v.front() == '"' && v.back() == '"') v = v.substr(1, v.size() - 2);
     if (v.rfind("$HOME", 0) == 0) v = Home() + v.substr(5);
     if (!v.empty()) return v;
   }
-  return Home() + "/Music";
+  return Home() + "/" + fallback;
 }
 
 std::string Lower(std::string s) {
@@ -352,6 +356,83 @@ void Serve() {
   }
 }
 
+// --- Downloads ------------------------------------------------------------------
+
+std::mutex g_added_mutex;
+std::string g_added;  // the last song moved in from Downloads
+Clock::time_point g_added_at;
+
+bool IsMidiName(const std::string& name) {
+  const std::string ext = Lower(fs::path(name).extension().string());
+  return ext == ".mid" || ext == ".midi";
+}
+
+// A finished MIDI file, not a browser's empty placeholder for one.
+bool LooksLikeMidi(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  char head[1024];
+  in.read(head, sizeof(head));
+  return std::string(head, in.gcount()).find("MThd") != std::string::npos;
+}
+
+// Moves a downloaded song into the songs folder, under a free name.
+void Import(const std::string& path) {
+  if (!LooksLikeMidi(path)) return;
+  const fs::path from(path);
+  const fs::path dir(SongsFolder());
+  std::error_code ec;
+  if (fs::equivalent(from.parent_path(), dir, ec)) return;
+  fs::create_directories(dir, ec);
+  fs::path to = dir / from.filename();
+  for (int n = 2; fs::exists(to, ec) && n < 1000; ++n) {
+    to = dir / (from.stem().string() + " (" + std::to_string(n) + ")" + from.extension().string());
+  }
+  fs::rename(from, to, ec);
+  if (ec) {  // another filesystem
+    ec.clear();
+    fs::copy_file(from, to, ec);
+    if (!ec) fs::remove(from, ec);
+  }
+  if (ec) {
+    Log("vox-menu: can't move %s to %s: %s", path.c_str(), to.c_str(), ec.message().c_str());
+    return;
+  }
+  Log("vox-menu: moved %s into the songs folder", from.filename().c_str());
+  Rescan();
+  std::lock_guard<std::mutex> lock(g_added_mutex);
+  g_added = to.stem().string();
+  g_added_at = Clock::now();
+}
+
+// Watches the Downloads folder while the setting is on: a .mid file that
+// finishes downloading (written and closed, or renamed from the browser's
+// partial file) is moved into the songs folder.
+void WatchDownloads() {
+  const int fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
+  if (fd < 0) return;
+  int wd = -1;
+  std::string watched;
+  alignas(inotify_event) char buf[16384];
+  while (true) {
+    const Config cfg = GetConfig();
+    const std::string want = cfg.piano_watch_downloads ? UserDir("DOWNLOAD", "Downloads") : "";
+    if (want != watched || (wd < 0 && !want.empty())) {
+      if (wd >= 0) inotify_rm_watch(fd, wd);
+      wd = want.empty() ? -1 : inotify_add_watch(fd, want.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO);
+      watched = want;
+    }
+    pollfd p{fd, POLLIN, 0};
+    if (poll(&p, 1, 1000) <= 0) continue;
+    const ssize_t n = read(fd, buf, sizeof(buf));
+    for (ssize_t i = 0; i < n;) {
+      const auto* e = reinterpret_cast<const inotify_event*>(buf + i);
+      i += sizeof(inotify_event) + e->len;
+      if (e->wd != wd || e->len == 0 || (e->mask & IN_ISDIR)) continue;
+      if (IsMidiName(e->name)) Import(watched + "/" + e->name);
+    }
+  }
+}
+
 std::once_flag g_server;
 Clock::time_point g_live_tried;
 
@@ -359,7 +440,7 @@ Clock::time_point g_live_tried;
 
 std::string SongsFolder() {
   const Config cfg = GetConfig();
-  if (cfg.piano_folder.empty()) return MusicDir();
+  if (cfg.piano_folder.empty()) return UserDir("MUSIC", "Music");
   if (cfg.piano_folder[0] == '~') return Home() + cfg.piano_folder.substr(1);
   return cfg.piano_folder;
 }
@@ -415,6 +496,10 @@ Status GetStatus() {
         st.tracks.push_back({t.name, t.notes, t.drums, g_p.muted[i] != 0, g_p.solo[i] != 0});
       }
     }
+  }
+  {
+    std::lock_guard<std::mutex> lock(g_added_mutex);
+    if (!g_added.empty() && Clock::now() - g_added_at < std::chrono::seconds(8)) st.added = g_added;
   }
   st.live = midi_input::Running();
   st.devices = midi_input::Devices();
@@ -519,7 +604,10 @@ void SetTrack(int track, bool muted, bool solo) {
 }
 
 void StartServer() {
-  std::call_once(g_server, [] { std::thread(Serve).detach(); });
+  std::call_once(g_server, [] {
+    std::thread(Serve).detach();
+    std::thread(WatchDownloads).detach();
+  });
 }
 
 std::string Command(const std::string& raw) {

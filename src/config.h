@@ -101,6 +101,7 @@ struct Config {
 
   // Piano (MIDI player, piano.h)
   std::string piano_folder;           // songs; empty = the Music folder
+  bool piano_watch_downloads = true;  // move .mid files downloaded into it
   bool piano_88 = true;               // all 88 keys (Ctrl for the outer ones), not just 61
   bool piano_fold = false;            // shift notes past the keyboard by octaves to fit
   double piano_transpose = 0;         // semitones
@@ -212,6 +213,7 @@ void Config::Visit(V&& v) {
   v("macro_record_moves", macro_record_moves);
 
   v("piano_folder", piano_folder);
+  v("piano_watch_downloads", piano_watch_downloads);
   v("piano_88", piano_88);
   v("piano_fold", piano_fold);
   v("piano_transpose", piano_transpose);

@@ -1064,12 +1064,19 @@ void PianoTab(Config& cfg) {
     ImGui::PopID();
     if (current) ImGui::PopStyleColor();
   }
+  if (!st.added.empty()) {
+    ImGui::PushStyleColor(ImGuiCol_Text, C4(1, 153, 237));
+    ImGui::TextWrapped("Added %s from Downloads", st.added.c_str());
+    ImGui::PopStyleColor();
+  }
   if (songs.empty()) {
     Hint(("No .mid files in " + piano::SongsFolder()).c_str());
   } else if (shown == 0) {
     Hint("No songs match.");
   }
   ImGui::EndChild();
+  Switch("Add songs I download", &cfg.piano_watch_downloads);
+  if (ImGui::IsItemHovered()) ImGui::SetTooltip(".mid files saved to Downloads move into the songs folder.");
 
   if (st.loaded && !st.tracks.empty()) {
     char tracks[48];

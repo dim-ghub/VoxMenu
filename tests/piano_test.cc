@@ -259,6 +259,35 @@ int main() {
   piano::Stop();
   Check(!piano::GetStatus().playing && piano::GetStatus().position == 0, "stop goes back to the start");
 
+  // --- Songs downloaded into Downloads move into the songs folder ---
+  const std::string downloads = root + "/dl";
+  std::system(("mkdir -p '" + downloads + "'").c_str());
+  std::ofstream(root + "/user-dirs.dirs") << "XDG_DOWNLOAD_DIR=\"$HOME/dl\"\n";
+  auto in_songs = [&](const std::string& name) {
+    for (int i = 0; i < 300; ++i) {
+      for (const std::string& s : piano::Songs()) {
+        if (s == name) return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+  };
+  piano::StartServer();
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  // Like Firefox: an empty placeholder, then the finished .part renamed over it.
+  std::ofstream(downloads + "/New Song.mid").close();
+  std::ofstream(downloads + "/New Song.mid.part", std::ios::binary) << Song();
+  std::rename((downloads + "/New Song.mid.part").c_str(), (downloads + "/New Song.mid").c_str());
+  Check(in_songs("New Song"), "a downloaded song shows up in the list");
+  Check(access((songs + "/New Song.mid").c_str(), F_OK) == 0, "moved into the songs folder");
+  Check(access((downloads + "/New Song.mid").c_str(), F_OK) != 0, "and out of Downloads");
+  Check(piano::GetStatus().added == "New Song", "the window says so");
+  std::ofstream(downloads + "/broken.mid", std::ios::binary) << Song();
+  Check(in_songs("broken (2)"), "a name already taken gets a number");
+  std::ofstream(downloads + "/readme.txt") << "not a song";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  Check(access((downloads + "/readme.txt").c_str(), F_OK) == 0, "other downloads stay put");
+
   if (g_failures == 0) std::printf("piano_test: all passed\n");
   return g_failures == 0 ? 0 : 1;
 }

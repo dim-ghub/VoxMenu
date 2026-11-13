@@ -47,6 +47,7 @@ struct Status {
   double speed = 1.0;
   std::vector<TrackStatus> tracks;
   std::string error;  // the last load that failed
+  std::string added;  // a song just moved in from Downloads
   // MIDI keyboard
   bool live = false;  // listening
   std::vector<std::string> devices;
@@ -66,7 +67,8 @@ void SpeedDown();
 void SetSpeed(double speed);
 void SetTrack(int track, bool muted, bool solo);
 
-// The control socket for StreamController. Started once, with the menu.
+// The control socket for StreamController, and the Downloads watcher
+// (new .mid files are moved into the songs folder). Started once.
 void StartServer();
 // One socket command ("GET_TIME", "LOAD_SONG 3"...) and its answer line.
 std::string Command(const std::string& line);

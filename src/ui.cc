@@ -1068,6 +1068,9 @@ void AutomationPage(Config& cfg) {
   TextField(row, "##songs_dir", g_songs_dir, sizeof(g_songs_dir), "Default (your Music folder)", &done);
   if (done) cfg.piano_folder = g_songs_dir;
   EndRow(row);
+  row = BeginRow("Add Downloaded Songs", "MIDI files saved to your Downloads folder move into the songs folder");
+  Switch(row, &cfg.piano_watch_downloads);
+  EndRow(row);
 
   Header("Status");
   const piano::Status song = piano::GetStatus();

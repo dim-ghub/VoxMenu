@@ -193,6 +193,7 @@ one, in one pill; its own `x` and `y` then don't apply.
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `piano_folder` | string | `""` | Where the `.mid` files are (sub-folders included); empty is your Music folder (`XDG_MUSIC_DIR`). `~` is your home. |
+| `piano_watch_downloads` | boolean | `true` | Move `.mid` / `.midi` files saved to the Downloads folder (`XDG_DOWNLOAD_DIR`) into the songs folder while the game runs. |
 | `piano_88` | boolean | `true` | All 88 keys: notes below C2 and above C7 are Ctrl + key. Off: only the 61 keys from C2 to C7. |
 | `piano_fold` | boolean | `false` | Move notes past the keyboard by octaves until they fit, instead of dropping them. |
 | `piano_transpose` | float | `0` | Semitones up (or down, negative). |
