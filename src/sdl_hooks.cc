@@ -413,6 +413,10 @@ bool Filter(SDL_Event& e) {
     return true;
   }
   if (is_key && !overlay::WantsText() && automation::HandleHotkey(e.key)) return true;
+  if (is_button && !open && (e.button.button == SDL_BUTTON_X1 || e.button.button == SDL_BUTTON_X2) &&
+      automation::HandleHotkeyButton(e.button.button, e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)) {
+    return true;
+  }
   if (!open) {
     if (e.type == SDL_EVENT_MOUSE_MOTION) overlay::SetMousePos(e.motion.x, e.motion.y);
     // The top-bar button and floating windows work whenever the cursor is
@@ -692,6 +696,10 @@ EXPORT int SDL_PeepEvents(SDL_Event* events, int numevents, SDL_EventAction acti
                           Uint32 min_type, Uint32 max_type) {
   static int (*fn)(SDL_Event*, int, SDL_EventAction, Uint32, Uint32);
   if (action == SDL_GETEVENT && events != nullptr && numevents > 0) {
+    // Nightcap reads its events this way, once per frame (SDL_PumpEvents,
+    // then SDL_PeepEvents until empty): tick here even when nothing came in,
+    // or the autoclicker and macros stall while the mouse is still.
+    MainThreadTick();
     int injected_count = 0;
     while (injected_count < numevents) {
       if (!PopInjectedEvent(&events[injected_count])) break;
@@ -702,7 +710,6 @@ EXPORT int SDL_PeepEvents(SDL_Event* events, int numevents, SDL_EventAction acti
   const int count = Cached(fn, "SDL_PeepEvents")(events, numevents, action, min_type, max_type);
   // Only removed events count; a peek would see the same event again later.
   if (action != SDL_GETEVENT || events == nullptr || count <= 0) return count;
-  MainThreadTick();
   int kept = 0;
   for (int i = 0; i < count; ++i) {
     if (!Filter(events[i])) {

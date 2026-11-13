@@ -1,11 +1,13 @@
 // Stands in for Nightcap when testing the overlay: an SDL3 window presenting
 // Vulkan frames (cleared to a game-ish green with a sky band), with input
-// arriving through SDL_PollEvent like Nightcap's own loop.
+// arriving through SDL_PollEvent, or with VK_DRIVER_PEEP=1 the way Nightcap
+// reads them (SDL_PumpEvents, then SDL_PeepEvents until empty).
 //
 //   vk_driver FRAMES [script]
 //
 // The optional script injects input at given frames, one action per line:
 //   <frame> key <SDL keycode>          press and release a key
+//   <frame> keydown / keyup <keycode>  press, or release, a key (to hold it)
 //   <frame> click <x> <y>              left click at window coordinates
 //   <frame> move <x> <y>               move the mouse there
 //   <frame> press <x> <y>              left button down there (for drags)
@@ -59,7 +61,13 @@ void Inject(SDL_Window* window, const Action& a) {
   SDL_Event e;
   SDL_zero(e);
   const SDL_WindowID id = SDL_GetWindowID(window);
-  if (a.kind == "key") {
+  if (a.kind == "keydown" || a.kind == "keyup") {
+    e.type = a.kind == "keydown" ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+    e.key.windowID = id;
+    e.key.key = static_cast<SDL_Keycode>(std::strtoul(a.arg.c_str(), nullptr, 0));
+    e.key.down = a.kind == "keydown";
+    SDL_PushEvent(&e);
+  } else if (a.kind == "key") {
     e.type = SDL_EVENT_KEY_DOWN;
     e.key.windowID = id;
     e.key.key = static_cast<SDL_Keycode>(std::strtoul(a.arg.c_str(), nullptr, 0));
@@ -222,14 +230,21 @@ int main(int argc, char** argv) {
   VkFence fence;
   vkCreateFence(device, &fci, nullptr, &fence);
 
+  const bool peep = std::getenv("VK_DRIVER_PEEP") != nullptr;
   for (int frame = 0; frame < frames; ++frame) {
     for (const Action& a : script) {
       if (a.frame == frame) Inject(window, a);
     }
     SDL_Event e;
-    while (SDL_PollEvent(&e)) {
+    const auto seen = [](const SDL_Event& e) {
       if (e.type == SDL_EVENT_KEY_DOWN) std::printf("game got key %u\n", static_cast<unsigned>(e.key.key));
       if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) std::printf("game got click\n");
+    };
+    if (peep) {
+      SDL_PumpEvents();
+      while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST) > 0) seen(e);
+    } else {
+      while (SDL_PollEvent(&e)) seen(e);
     }
     uint32_t index;
     CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, acquired, VK_NULL_HANDLE, &index));

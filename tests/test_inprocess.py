@@ -203,6 +203,31 @@ class HudAndAutomationTest(unittest.TestCase):
             self.assertNotIn("game got key 1073741887", r.stdout, "F6 is kept from the game")
             self.assertGreaterEqual(r.stdout.count("game got click"), 3)
 
+    def test_autoclicker_keeps_clicking_with_the_mouse_still(self):
+        with tempdir() as t:
+            # Read the way Nightcap reads events; after F6, nothing else
+            # happens (no mouse movement), and it must keep clicking.
+            r, _ = vk_cfg(Path(t), f"10 key {F6}\n", {"click_cps": 50, "click_hold_ms": 0}, frames=120,
+                          VK_DRIVER_PEEP=1)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertGreaterEqual(r.stdout.count("game got click"), 10)
+
+    def test_autoclicker_hold_mode_clicks_only_while_held(self):
+        hold = {"click_cps": 50, "click_hold_ms": 0, "key_clicker_mode": "hold"}
+        with tempdir() as t:
+            # Held for 70 frames: clicks the whole time.
+            r, _ = vk_cfg(Path(t), f"10 keydown {F6}\n80 keyup {F6}\n", hold, frames=120)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            held = r.stdout.count("game got click")
+            self.assertNotIn("game got key 1073741887", r.stdout, "F6 is kept from the game")
+            self.assertIn("autoclicker off", r.stderr, "letting go stops it")
+        with tempdir() as t:
+            # A tap is a moment's clicking, not a toggle that keeps going.
+            r, _ = vk_cfg(Path(t), f"10 keydown {F6}\n11 keyup {F6}\n", hold, frames=120)
+            tapped = r.stdout.count("game got click")
+        self.assertGreaterEqual(held, 5)
+        self.assertLess(tapped, held / 3)
+
     def test_layout_editor_drags_with_snapping(self):
         with tempdir() as t:
             tmp = Path(t)
