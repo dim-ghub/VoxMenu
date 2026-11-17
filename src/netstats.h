@@ -1,10 +1,4 @@
-// Network numbers for the HUD: the game server's address, its round-trip
-// time, and roughly where it is.
-//
-// The address comes from Roblox's log (gamestate.h), or else from the
-// game's connected UDP socket. Ping is timed from the game's own packets
-// (nightcap.h); without that, an ICMP echo or a TCP handshake. The location is looked up once per server
-// at ip-api.com, only while the server-location overlay is on.
+// Server address, ping and location for the HUD.
 
 #ifndef VOX_MENU_NETSTATS_H_
 #define VOX_MENU_NETSTATS_H_

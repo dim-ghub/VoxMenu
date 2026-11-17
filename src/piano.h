@@ -1,17 +1,5 @@
-// The MIDI piano player (ported from MIDI++): plays .mid files, or a MIDI
-// keyboard, on Roblox's virtual pianos by pressing the keys they use
-// ("1234567890qwerty...", Shift for black keys, Ctrl past 61 keys). Like
-// the autoclicker, every key goes through Nightcap's own event queue
-// (inject.h), so it only ever reaches the Roblox window.
-//
-// Commands come from the render thread (the menu), the control socket and
-// hotkeys; the keys are pressed on the main thread in Tick().
-//
-// The control socket, ~/.vox-menu-piano.sock, takes one line per
-// connection and answers with one line: PLAY_PAUSE, REWIND, SKIP, RESTART,
-// SPEED_UP, SPEED_DOWN, STOP, GET_TIME ({"current","total","speed",
-// "paused","song"}), LIST_SONGS (a JSON array of names) and
-// LOAD_SONG <index into that list>.
+// MIDI piano player (ported from MIDI++). Keys are injected on the main
+// thread in Tick(). Control socket: ~/.vox-menu-piano.sock, MIDI++ protocol.
 
 #ifndef VOX_MENU_PIANO_H_
 #define VOX_MENU_PIANO_H_

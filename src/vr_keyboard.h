@@ -1,9 +1,5 @@
-// Nightcap's in-headset (VR) keyboard types straight into Roblox through
-// Nightcap's own input queue, so its keys and text never pass through the
-// SDL event functions this library wraps. This finds the keyboard's host
-// callbacks in Nightcap (by symbol name, from /proc/self/exe) and puts ours
-// in front of them, so VR typing reaches the chat tracker like a physical
-// keyboard does.
+// Wraps the VR keyboard's host callbacks so its typing reaches the chat
+// tracker (it bypasses SDL events).
 
 #ifndef VOX_MENU_VR_KEYBOARD_H_
 #define VOX_MENU_VR_KEYBOARD_H_

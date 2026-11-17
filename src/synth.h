@@ -1,8 +1,4 @@
 // Animalese speech synthesis.
-//
-// Authentic Animal Crossing voices built from authentic character voice sprite banks
-// (Female 1–4, Male 1–4) for English and Korean, playing in step with the text box,
-// one blip per character, with subtle pitch jitter and question inflections.
 
 #ifndef VOX_MENU_SYNTH_H_
 #define VOX_MENU_SYNTH_H_

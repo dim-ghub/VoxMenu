@@ -28,12 +28,7 @@
 #include "synth.h"
 #include "tts.h"
 
-// Layout and colours follow Roblox's in-experience menu (Settings page),
-// measured from screenshots: a black, slightly see-through panel; flat rows
-// with a label column on the left and a control column from ~40% across;
-// big thin chevrons for pickers; ten-block sliders with circled -/+; dark
-// bottom buttons with key hints and a navy primary; a white rounded outline
-// for the keyboard/gamepad selection.
+// Layout and colours follow Roblox's in-experience menu.
 
 namespace nac::ui {
 
@@ -164,7 +159,6 @@ void TextCentered(ImFont* font, ImVec2 center, ImU32 col, const char* text) {
   Text(font, ImVec2(center.x - size.x / 2, center.y - size.y / 2), col, text);
 }
 
-// Outline icons, like Roblox's menu tab icons.
 // Vox Menu's logo: a rounded V with a dot over it, on a 24-unit grid
 // (assets/vox-menu.svg), `size` units across, centred on c.
 void VoxMark(ImDrawList* dl, ImVec2 c, float size, ImU32 ink, ImU32 dot) {
@@ -289,7 +283,6 @@ void KeyHint(ImVec2 c, const char* key, ImU32 col) {
   TextCentered(g_fonts.hint, c, col, key);
 }
 
-// The white rounded outline Roblox draws around the selected element.
 void SelectionOutline(ImVec2 min, ImVec2 max, float rounding) {
   const float g = S(3);
   g_dl->AddRect(ImVec2(min.x - g, min.y - g), ImVec2(max.x + g, max.y + g), White(), rounding + g, 0, S(2));
@@ -372,8 +365,7 @@ bool Hit(const char* id, ImVec2 min, ImVec2 max, bool* hovered = nullptr, bool* 
   return clicked;
 }
 
-// A settings row: label (and optional subtitle) on the left, the control in
-// a column on the right. Rows are flat; hovering or selecting highlights.
+// Label on the left, control in a right-hand column.
 struct Row {
   ImVec2 min, max;
   float ctrl_l, ctrl_r;  // control column
@@ -431,8 +423,7 @@ void Header(const char* text, bool first = false) {
   ImGui::Dummy(ImVec2(w, y - pos.y + g_fonts.header->FontSize + S(10)));
 }
 
-// Picker values swipe when changed: the old text slides a little toward the
-// side away from the arrow you pressed and fades, the new one slides in.
+// Picker values slide and fade when changed.
 struct Swipe {
   float at = -10;
   float dir = 0;  // +1: pressed ›, -1: pressed ‹
@@ -508,8 +499,7 @@ void Picker(Row& row, const std::vector<std::string>& labels, int* index) {
   ValueText(id, labels[before], labels[*index], dir, ImVec2((row.ctrl_l + row.ctrl_r) / 2, row.mid));
 }
 
-// Ten blocks between a circled − and +; the − hides at the minimum and the
-// + at the maximum, with small labels for the two ends underneath.
+// Ten blocks between circled −/+ buttons.
 void Slider(Row& row, double* value, double lo, double hi, double step, const char* low_label,
             const char* high_label) {
   const float bar_l = row.ctrl_l + S(52), bar_r = row.ctrl_r - S(53);
@@ -554,7 +544,6 @@ void Slider(Row& row, double* value, double lo, double hi, double step, const ch
   Text(g_fonts.tiny, ImVec2(bar_r - hs.x + S(2), label_y), Muted(), high_label);
 }
 
-// A dark rounded box like Roblox's dropdowns, holding a text field.
 bool TextField(Row& row, const char* id, char* buf, size_t size, const char* placeholder, bool* done) {
   const float h = S(42);
   const ImVec2 min(row.ctrl_l, row.mid - h / 2);
@@ -596,7 +585,6 @@ void StatusDot(Row& row, bool on) {
   g_dl->AddCircleFilled(ImVec2(row.ctrl_r - S(8), row.mid), S(6), on ? C(57, 194, 113) : C(110, 112, 118));
 }
 
-// A dark button filling the control column, like the bottom bar's.
 bool ActionButton(Row& row, const char* label, bool primary = false) {
   const float h = S(40);
   const ImVec2 a(row.ctrl_l, row.mid - h / 2), b(row.ctrl_r, row.mid + h / 2);
@@ -1135,11 +1123,7 @@ void SettingsPage(Config& cfg) {
 // --------------------------------------------------------------------------
 // The menu
 //
-// Timings follow Roblox's menu, measured from a 60 fps recording: it opens
-// by sliding up from below the screen (~0.18 s, decelerating) while the
-// game dims; pages slide sideways (~0.12 s), the new one coming from the
-// side of the tab you picked; closing drops the dim and the page at once
-// and the empty panel falls off the bottom (~0.35 s, accelerating).
+// Animation timings match Roblox's menu.
 
 float g_opened_at = -10;
 float g_closed_at = -10;
@@ -1205,7 +1189,6 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
   g_panel = {p0, p1};
   g_dl->AddRectFilled(p0, p1, Panel(), S(8));
 
-  // Tabs: Roblox icon + label; the active one is white with an underline.
   struct Tab { const char* label; const char* icon; } tabs[] = {
       {"TTS", "frame-bubble-soundwave"}, {"Output", "speaker"}, {"Game", "controller"}, {"HUD", "gauge"},
       {"Automation", "cursor-arrow"}, {"Settings", "gear"}};
@@ -1243,13 +1226,11 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
     }
     Text(g_fonts.tab, ImVec2(x + icon + gap, ic.y - ts.y / 2), col, tabs[i].label);
   }
-  // The thin line under the whole tab row; the active underline sits on it.
   g_dl->AddRectFilled(ImVec2(p0.x + inset, p0.y + tab_h - S(1)), ImVec2(p1.x - inset, p0.y + tab_h), C(51, 51, 51));
   if (!closing) {
     const ImVec2 a(p0.x + inset + shown_at * tab_w, p0.y + tab_h - S(2));
     g_dl->AddRectFilled(a, ImVec2(a.x + tab_w, p0.y + tab_h), White());
   }
-  // The page and buttons vanish as soon as the menu closes.
   if (closing && Now() - g_closed_at > 0.1f) return;
 
   // Q / E switch pages too, like the gamepad bumpers.
@@ -1311,7 +1292,6 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
   ImGui::PopStyleVar(5);
   ImGui::EndChild();
 
-  // Bottom buttons, like Leave / Respawn / Resume.
   const float gap = S(8);
   const float bw = (pw - inset * 2 - gap * 2) / 3;
   struct Button { const char* label; const char* icon; bool primary; } buttons[] = {
@@ -1353,7 +1333,6 @@ void DrawMenu(Config& cfg, float W, float H, bool closing) {
   }
 }
 
-// The top-bar button: a solid circle like Roblox's own top-bar buttons.
 
 void DrawTopBarButton(bool open, bool closing, float W) {
   const overlay::Metrics m = overlay::GetMetrics();
@@ -1366,13 +1345,10 @@ void DrawTopBarButton(bool open, bool closing, float W) {
   const float r = S(size / 2);
   const ImVec2 mouse = open ? ImGui::GetIO().MousePos : ImVec2(m.mouse_x * g_px, m.mouse_y * g_px);
   const bool hovered = (mouse.x - c.x) * (mouse.x - c.x) + (mouse.y - c.y) * (mouse.y - c.y) <= r * r;
-  // Like Roblox's own top-bar buttons: #121215, lighter when hovered, and
-  // the icon turns blue (like its active gear) while the menu is open.
   float scale = 1.0f;
   if (IsSpeaking()) scale *= 1.0f + 0.04f * std::sin(Now() * 12.0f);  // talking
   dl->AddCircleFilled(c, r, hovered ? C(42, 43, 48) : C(18, 18, 21), 48);
   const ImU32 ink = open ? C(1, 153, 237) : White();
-  // The logo: white with a blue dot; blue with a white dot while open.
   VoxMark(dl, c, S(24) * scale, ink, open ? White() : C(1, 153, 237));
   if (open) {
     ImGui::SetCursorScreenPos(ImVec2(c.x - r, c.y - r));
@@ -1404,9 +1380,7 @@ bool PrepareFonts(float px) {
     g_fonts.family = dir;
   }
   const char* fallback = "/usr/share/fonts/noto/NotoSans-Medium.ttf";
-  // Sizes match Roblox's menu text (its cap heights: tabs 11 px, rows and
-  // buttons 10 px, headers 14 px, subtitles 7 px; Builder Sans capitals are
-  // ~0.56 of the size ImGui is given).
+  // Sizes match Roblox's menu text cap heights.
   g_fonts.title = AddFont(dir, "BuilderSans-Medium.otf", std::round(18 * px), fallback);
   g_fonts.value = AddFont(dir, "BuilderSans-Regular.otf", std::round(18 * px), fallback);
   g_fonts.small = AddFont(dir, "BuilderSans-Regular.otf", std::round(13 * px), fallback);
@@ -1417,11 +1391,9 @@ bool PrepareFonts(float px) {
   g_fonts.hint = AddFont(dir, "BuilderSans-Bold.otf", std::round(10 * px), fallback);
   g_fonts.ui = AddFont(dir, "BuilderSans-Medium.otf", std::round(15 * px), fallback);
   g_fonts.ui_bold = AddFont(dir, "BuilderSans-Bold.otf", std::round(15 * px), fallback);
-  // HUD overlays are drawn at any size from one large bake.
   g_fonts.hud = AddFont(dir, "BuilderSans-Bold.otf", std::round(32 * px), fallback);
   io.FontDefault = g_fonts.value;
 
-  // Roblox's icons, baked large and drawn at the sizes each spot needs.
   g_icon_font = nullptr;
   const std::string icon_path = FindRobloxIconFont();
   if (!icon_path.empty() && (g_icons.path() == icon_path || g_icons.Load(icon_path))) {
@@ -1570,7 +1542,6 @@ bool Draw(float px, bool srgb) {
   ImGui::End();
   ImGui::PopStyleVar(2);
 
-  // The floating automation window and click points, over everything.
   std::vector<ImVec4> hot;
   DrawTools(cfg, &hot);
   DrawStatusBadge(cfg);
@@ -1655,7 +1626,6 @@ bool DrawVr(float px, bool srgb, bool panel_open, float* stats_w) {
     g_nav = Nav{};
     DrawMenu(cfg, S(kVrPanelW), S(kVrPanelH), false);
     g_nav = desktop_nav;
-    // Where the controller points: a blue dot with a white ring.
     const ImVec2 m = io.MousePos;
     if (m.x >= 0 && m.y >= 0 && m.x < S(kVrPanelW) && m.y < S(kVrPanelH)) {
       ImDrawList* fg = ImGui::GetForegroundDrawList();

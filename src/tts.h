@@ -1,8 +1,4 @@
-// Local text-to-speech synthesis engine dispatcher for Vox Menu.
-// Supports:
-//   - Piper TTS: Fast local neural AI voices (ONNX)
-//   - eSpeak-NG: Lightweight, classic multi-language TTS
-//   - Animalese: Animal Crossing villager voices (Classic, NH, Bebebese)
+// TTS engine dispatch: Piper, eSpeak-NG, Animalese.
 
 #ifndef VOX_MENU_TTS_H_
 #define VOX_MENU_TTS_H_

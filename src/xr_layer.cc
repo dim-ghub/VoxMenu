@@ -1,21 +1,5 @@
-// OpenXR API layer: Vox Menu in the headset.
-//
-// The same library is named in an OpenXR API layer manifest (the launcher
-// writes it next to the Vulkan one), so the OpenXR loader inside Nightcap
-// puts these functions between Nightcap and the runtime:
-//
-//   * xrCreateSession: notes the Vulkan device and queue (the game's own,
-//     which the Vulkan layer already follows) and makes a swapchain for the
-//     panel.
-//   * Input: our own action set (aim pose, trigger, the hold-to-open click,
-//     thumbstick for scrolling) rides along with Nightcap's, added to its
-//     binding suggestions, attach and sync calls. Bindings are only added for
-//     controller profiles listed here, and if the runtime refuses them the
-//     call is repeated without, so Nightcap's input never breaks.
-//   * xrEndFrame: renders the panel (xr_render.h) and adds it to the frame as
-//     quad layers: the menu in front of you, the stats pill low in view.
-//   * While the menu is open, the game's buttons and sticks read as released,
-//     like the desktop menu keeps the mouse and keyboard.
+// OpenXR API layer: draws the menu panel and stats in the headset, adds our
+// action set alongside Nightcap's, and idles the game's input while open.
 
 #define XR_USE_GRAPHICS_API_VULKAN
 #include <vulkan/vulkan.h>

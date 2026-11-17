@@ -1,7 +1,4 @@
-// A datagram socket the launcher uses to reach a running Nightcap:
-// $XDG_RUNTIME_DIR/vox-menu/control-<pid>.sock.
-// Sending "open" opens the in-game menu (when Vox Menu is launched while
-// Nightcap is already running).
+// Datagram socket $XDG_RUNTIME_DIR/vox-menu/control-<pid>.sock; "open" opens the menu.
 
 #include "control.h"
 

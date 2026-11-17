@@ -1,7 +1,4 @@
-// Whether Roblox is in a game right now, and which server, from Roblox's
-// own log lines ("Joining game ... at <ip>", "UDMUX Address = <ip>, Port =
-// <port>" and "onGameLeaveBegin()"). They arrive straight from Nightcap's
-// log observer (nightcap.h) or, failing that, from its session log file.
+// In-game state and current server, parsed from Roblox's log lines.
 
 #ifndef VOX_MENU_GAMESTATE_H_
 #define VOX_MENU_GAMESTATE_H_

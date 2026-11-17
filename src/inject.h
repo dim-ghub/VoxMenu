@@ -1,6 +1,4 @@
-// Synthetic input for Nightcap, implemented by the SDL hooks. Events are
-// queued and handed to Nightcap by its next event poll, so the game sees
-// them exactly like the player's own. Main thread only.
+// Synthetic input queued for Nightcap's next event poll. Main thread only.
 
 #ifndef VOX_MENU_INJECT_H_
 #define VOX_MENU_INJECT_H_

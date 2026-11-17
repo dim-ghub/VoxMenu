@@ -1,6 +1,4 @@
-// Synthesizes chat messages via the selected TTS backend (Piper, eSpeak-NG,
-// or Animalese) and plays them: into Nightcap's own microphone stream (so Roblox
-// voice chat hears it) and/or on your speakers.
+// Synthesizes chat messages and plays them into the mic and/or speakers.
 
 #ifndef VOX_MENU_SPEECH_H_
 #define VOX_MENU_SPEECH_H_

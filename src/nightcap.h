@@ -1,17 +1,5 @@
-// Direct hooks into Nightcap's own host interfaces, from inside its process:
-//
-//   * Roblox's log lines as they are logged, through Nightcap's log
-//     observer API (mocktail_android_log_add_observer), instead of polling
-//     the session log file.
-//   * The game's UDP packets, through Nightcap's datagram observer, chained
-//     in front of Nightcap's own server-info overlay. Timing the server's
-//     ACKs gives the real in-game ping (Nightcap's method).
-//   * Joining a server through Nightcap's external-launch broker: the
-//     running Nightcap leaves the current game and joins the new one in
-//     place, as when you click Join on the website.
-//
-// Each piece is optional: with an older or stripped Nightcap the callers
-// fall back (log file, ICMP ping, starting a second Nightcap with the link).
+// Hooks into Nightcap's host interfaces: its log observer, datagram observer
+// (for ping) and external-launch broker. Each is optional; callers fall back.
 
 #ifndef VOX_MENU_NIGHTCAP_H_
 #define VOX_MENU_NIGHTCAP_H_

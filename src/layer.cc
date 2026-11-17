@@ -1,14 +1,5 @@
-// Vulkan layer that draws the Vox Menu overlay onto Nightcap's frames.
-//
-// The same library is LD_PRELOADed (SDL hooks) and named in an implicit
-// layer manifest, so the loader dlopen()s the already loaded copy and both
-// halves share state. Before each present, the menu is drawn with Dear ImGui
-// into the swapchain image, waiting on the game's semaphores and signalling
-// our own, which the present then waits on.
-//
-// Debugging: VOX_MENU_DUMP=/path.ppm saves one composited frame (the 30th
-// drawn, or VOX_MENU_DUMP_FRAME), and VOX_MENU_MENU_OPEN=1 starts with the
-// menu open. The older VOX_TTS_ / NIGHTCAP_AC_ prefixes work too.
+// Vulkan layer: draws the overlay into each swapchain image before present.
+// Debug: VOX_MENU_DUMP, VOX_MENU_DUMP_FRAME, VOX_MENU_MENU_OPEN.
 
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>

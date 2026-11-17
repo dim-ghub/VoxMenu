@@ -1,6 +1,4 @@
-// MIDI keyboards, through the ALSA sequencer (libasound, loaded when first
-// needed). While running it listens to every MIDI input it finds, keyboards
-// plugged in later included.
+// MIDI keyboard input through the ALSA sequencer (libasound loaded lazily).
 
 #ifndef VOX_MENU_MIDI_INPUT_H_
 #define VOX_MENU_MIDI_INPUT_H_

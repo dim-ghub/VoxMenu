@@ -1,10 +1,4 @@
-// The HUD overlays (FPS, ping, server location, keystrokes), the layout
-// editor that moves and resizes them, and the floating automation window
-// for the autoclicker and macros.
-//
-// Overlays are plain draw-list shapes in the background, under any menu.
-// The automation window is a regular Dear ImGui window that stays on screen
-// while you play; the SDL hooks give it the mouse where it is drawn.
+// HUD overlays, the layout editor, and the floating automation window.
 
 #include <SDL3/SDL.h>
 
@@ -30,9 +24,7 @@
 namespace nac::ui {
 namespace {
 
-// Roblox's top-bar look, measured from the client: 44 px circles and pills,
-// 8 px apart, filled #121215, with white icons and bold text. #0199ED (its
-// active gear) is the one accent, and its muted-mic red marks problems.
+// Roblox's top-bar look: 44 px pills 8 px apart, #121215 fill, #0199ED accent.
 ImU32 Fill(float a = 1.0f) { return C(18, 18, 21, a); }
 ImU32 ChipFill() { return C(42, 43, 48); }
 ImU32 Accent(float a = 1.0f) { return C(1, 153, 237, a); }
@@ -79,14 +71,12 @@ enum { kFps, kPing, kServer, kKeys };
 // Sizes at 1x, in logical units, all scaled by u (pixels per unit).
 constexpr float kPill = 44, kGap = 8, kIcon = 22, kPadL = 14, kPadR = 18, kText = 16;
 
-// Text drawn at any size from the large baked HUD font.
 void HudText(ImDrawList* dl, float size, ImVec2 pos, ImU32 col, const char* text) {
   dl->AddText(g_fonts.hud, size, ImVec2(std::round(pos.x), std::round(pos.y)), col, text);
 }
 
 ImVec2 HudMeasure(float size, const char* text) { return g_fonts.hud->CalcTextSizeA(size, FLT_MAX, 0, text); }
 
-// Coloured runs of text on one line.
 struct Run {
   std::string text;
   ImU32 col;
@@ -205,7 +195,6 @@ ImVec2 WidgetSize(const Config& cfg, int which, float u) {
   return ImVec2(std::round(w), std::round(kPill * u));
 }
 
-// Fades for the keystroke keys.
 std::map<int, float> g_key_glow;
 
 float Glow(int id, bool on) {
@@ -214,8 +203,6 @@ float Glow(int id, bool on) {
   return g;
 }
 
-// A key: dark at rest; pressed, white with a dark label (or blue with a
-// white one).
 void KeyCap(ImDrawList* dl, ImVec2 a, ImVec2 b, float u, const char* label, const char* sub, float glow,
             const Config& cfg) {
   const bool blue = cfg.hud_keys_pressed == "blue";
@@ -326,9 +313,7 @@ int AttachedTo(const Config& cfg, int which) {
   return target;
 }
 
-// Every overlay that is on, placed. One joined onto another sits right
-// after it, the standard gap apart, in the same pill (`group`, the index of
-// the first overlay in the chain), like Roblox's menu / chat / mic group.
+// Every overlay that is on, placed; joined overlays share their chain's pill (`group`).
 struct Placed {
   int which = -1;
   ImVec2 min, size;
@@ -409,7 +394,6 @@ float SnapAxis(float* pos, float size, const std::vector<float>& lines, float th
 // --------------------------------------------------------------------------
 // Pieces of the top-bar look, for overlays drawn straight to a draw list
 
-// A key hint chip ("F6", "Esc"): returns its width.
 float KeyChip(ImDrawList* dl, ImVec2 left_middle, const char* key, float h) {
   const float size = h * 0.5f;
   const ImVec2 ts = HudMeasure(size, key);
@@ -460,8 +444,6 @@ bool OverMenuOrWindow() {
   return OverMenu(ImGui::GetIO().MousePos);
 }
 
-// The window's own controls, drawn like Roblox's: pills and chips, white
-// when selected, a blue switch when on.
 
 void Label(const char* text) {
   ImGui::PushFont(g_fonts.ui_bold);
@@ -477,7 +459,6 @@ void Hint(const char* text) {
   ImGui::PopStyleColor();
 }
 
-// A chip: white with dark text when selected, dark otherwise.
 bool Chip(const char* label, bool selected, float width, float height = 0) {
   if (height <= 0) height = S(32);
   const ImVec2 a = ImGui::GetCursorScreenPos();
@@ -494,7 +475,6 @@ bool Chip(const char* label, bool selected, float width, float height = 0) {
   return clicked;
 }
 
-// One choice out of a few, as a row of chips.
 bool Segmented(std::string* value, const std::vector<std::pair<const char*, const char*>>& options) {
   const float gap = S(6), avail = ImGui::GetContentRegionAvail().x;
   const float w = std::floor((avail - gap * (options.size() - 1)) / options.size());
@@ -511,7 +491,6 @@ bool Segmented(std::string* value, const std::vector<std::pair<const char*, cons
   return changed;
 }
 
-// A label at the left of the row, the chips filling the rest.
 bool LabeledSegmented(const char* label, std::string* value,
                       const std::vector<std::pair<const char*, const char*>>& options) {
   const ImVec2 start = ImGui::GetCursorScreenPos();
@@ -529,7 +508,6 @@ bool LabeledSegmented(const char* label, std::string* value,
   return changed;
 }
 
-// A label with a switch at the right end of the row.
 bool Switch(const char* label, bool* value) {
   const float w = S(44), h = S(26);
   const float avail = ImGui::GetContentRegionAvail().x;
@@ -551,7 +529,6 @@ bool Switch(const char* label, bool* value) {
   return clicked;
 }
 
-// A thin slider: the label and value above, a white bar and knob below.
 bool ThinSlider(const char* label, double* value, double lo, double hi, const char* format, bool log = false) {
   const float avail = ImGui::GetContentRegionAvail().x;
   char text[64];
@@ -619,7 +596,6 @@ bool ActionPill(const char* label, bool running, ImU32 dot, const std::string& k
   return clicked && !disabled;
 }
 
-// A dark row that opens a section, with a chevron.
 bool Expander(const char* label, bool* open) {
   const float avail = ImGui::GetContentRegionAvail().x, h = S(36);
   const ImVec2 a = ImGui::GetCursorScreenPos();
@@ -643,7 +619,6 @@ bool Expander(const char* label, bool* open) {
   return clicked;
 }
 
-// An outlined pill, for less important actions ("+ Add point").
 bool GhostPill(const char* label, float width, float height = 0) {
   if (height <= 0) height = S(32);
   const ImVec2 a = ImGui::GetCursorScreenPos();
@@ -750,7 +725,6 @@ void SyncStepBuffers(const automation::Step& s, int index) {
   std::snprintf(g_text_buf, sizeof(g_text_buf), "%s", s.text.c_str());
 }
 
-// Edits the selected step; true when it changed.
 bool StepEditor(automation::Step& s, int index) {
   using automation::Step;
   SyncStepBuffers(s, index);
@@ -881,7 +855,6 @@ void MacrosTab(Config& cfg) {
   if (g_macro.steps.empty()) Hint("Record one, or add steps below.");
   ImGui::EndChild();
 
-  // Adding steps after the selected one.
   auto add = [&](Step s) {
     const int at = g_selected >= 0 ? g_selected + 1 : static_cast<int>(g_macro.steps.size());
     g_macro.steps.insert(g_macro.steps.begin() + at, s);
@@ -1038,7 +1011,6 @@ void PianoTab(Config& cfg) {
     ImGui::SetTooltip("MIDI Connect: for pianos with a MIDI Connect option, which read notes from numpad codes.");
   }
 
-  // The songs folder, filtered by what's typed.
   const std::vector<std::string> songs = piano::Songs();
   char title[48];
   std::snprintf(title, sizeof(title), "Songs (%zu)", songs.size());
@@ -1147,8 +1119,7 @@ void PianoTab(Config& cfg) {
   }
 }
 
-// ImGui's own widgets in the window (fields, dropdowns, the step list) in
-// the same look: pill fields on #1F2025, white text.
+// ImGui's own widgets styled to match.
 int PushToolStyle(const Config& cfg) {
   const float field_h = S(32);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(16));
@@ -1284,7 +1255,6 @@ void DrawHud(const Config& cfg) {
   if (g_fonts.hud == nullptr) return;
   ImDrawList* dl = ImGui::GetBackgroundDrawList();
   const ImVec2 screen = ImGui::GetIO().DisplaySize;
-  // One pill per group, then what is in each.
   const std::vector<Placed> placed = LayoutWidgets(cfg, screen);
   std::map<int, std::pair<ImVec2, ImVec2>> pills;
   for (const Placed& p : placed) {
@@ -1322,7 +1292,6 @@ bool LayoutEditor(Config& cfg) {
   const ImVec2 mouse = io.MousePos;
   ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), screen, C(0, 0, 0, 0.3f));
 
-  // Boxes of the overlays that are on, where they are drawn.
   struct Box {
     int i;
     ImVec2 min, size;
@@ -1338,7 +1307,6 @@ bool LayoutEditor(Config& cfg) {
     return false;
   };
 
-  // The toolbar: a pill in the top-bar row.
   const char* hint = boxes.empty() ? "Turn on an overlay in the HUD tab first"
                                    : "Drag to move \xC2\xB7 drag a corner or scroll to resize \xC2\xB7 Shift: no snapping";
   const float h = S(44), bh = S(32);
@@ -1355,7 +1323,6 @@ bool LayoutEditor(Config& cfg) {
   x += hint_size.x + S(14);
   const float by = t0.y + (h - bh) / 2;
   bool stay = true;
-  // Snap: a chip with a small switch in it.
   {
     const ImVec2 a(x, by), b(x + snap_w, by + bh);
     if (PillButton(dl, a, b, "", false)) cfg.hud_snap = !cfg.hud_snap;
@@ -1371,7 +1338,6 @@ bool LayoutEditor(Config& cfg) {
   if (PillButton(dl, ImVec2(x, by), ImVec2(x + done_w, by + bh), "Done", true)) stay = false;
   if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_Enter)) stay = false;
 
-  // Picking up a box: the topmost one under the mouse.
   const float handle = S(14);
   int hovered = -1;
   bool on_handle = false;
@@ -1467,9 +1433,7 @@ bool LayoutEditor(Config& cfg) {
         break;
       }
       if (snap && g_drag.join < 0) {
-        // Screen edges (Roblox's 16 / 12 px margins), the centre, the row
-        // under the top bar, and the other overlays (and the 8 px gap
-        // beside them, where pills join up).
+// Screen edges, centre, the top-bar row, and other overlays (plus the join gap).
         std::vector<float> xs = {S(16), screen.x / 2, screen.x - S(16)};
         std::vector<float> ys = {S(12), S(68), screen.y / 2, screen.y - S(16)};
         for (const Box& box : boxes) {
@@ -1489,7 +1453,6 @@ bool LayoutEditor(Config& cfg) {
       SetWidgetPos(&w, ImVec2(px, py), size, screen);
     }
   }
-  // Guides pass behind the overlays (drawn after this, over the dimming).
   ImDrawList* under = ImGui::GetBackgroundDrawList();
   for (const float gx : g_drag.guides_x) {
     under->AddRectFilled(ImVec2(gx - S(1), 0), ImVec2(gx + S(1), screen.y), Accent());
@@ -1498,7 +1461,6 @@ bool LayoutEditor(Config& cfg) {
     under->AddRectFilled(ImVec2(0, gy - S(1)), ImVec2(screen.x, gy + S(1)), Accent());
   }
 
-  // Outlines, names and resize handles over the (already drawn) overlays.
   const std::vector<Placed> drawn = LayoutWidgets(cfg, screen);  // after this frame's changes
   for (const Placed& p : drawn) {
     const int i = p.which;
@@ -1534,8 +1496,6 @@ bool LayoutEditor(Config& cfg) {
 bool Picking() { return g_picking; }
 void CancelPick() { g_picking = false; }
 
-// A click point: a crosshair through a numbered dark circle; blue while
-// it is held or hovered.
 void Marker(ImDrawList* dl, ImVec2 c, const char* number, bool active) {
   const ImU32 ink = active ? Accent() : White();
   dl->AddRectFilled(ImVec2(c.x - S(1), c.y - S(20)), ImVec2(c.x + S(1), c.y + S(20)), ink);
@@ -1553,7 +1513,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
   const bool show_points = cfg.click_target == "points" && (cfg.tools_open || overlay::MenuOpen() ||
                                                             automation::GetStatus().clicking);
 
-  // Click-point markers: draggable, right-click removes.
   if (show_points) {
     auto points = automation::ParsePoints(cfg.click_points);
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -1587,7 +1546,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
     }
   }
 
-  // Placing a point: a crosshair at the mouse and a tip beside it.
   if (g_picking) {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     dl->AddRectFilled(ImVec2(mouse.x - S(1), mouse.y - S(14)), ImVec2(mouse.x + S(1), mouse.y + S(14)), White());
@@ -1637,7 +1595,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
                        ImGuiWindowFlags_NoCollapse)) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
-    // Snap to the screen edges while it is dragged.
     if (GImGui->MovingWindow != nullptr && GImGui->MovingWindow->RootWindow == window) {
       ImVec2 pos = window->Pos;
       const float m = S(16), t = S(14);
@@ -1650,7 +1607,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
     const float avail = ImGui::GetContentRegionAvail().x;
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Header: cursor icon, title, close.
     const ImVec2 h0 = ImGui::GetCursorScreenPos();
     const float hh = S(32);
     {
@@ -1671,7 +1627,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
     }
     ImGui::SetCursorScreenPos(ImVec2(h0.x, h0.y + hh + ImGui::GetStyle().ItemSpacing.y));
 
-    // Tabs: chips in a dark track.
     {
       const ImVec2 a = ImGui::GetCursorScreenPos();
       const float th = S(44), pad = S(4), tw = (avail - pad * 2 - S(6) * 2) / 3;
@@ -1694,7 +1649,6 @@ void DrawTools(Config& cfg, std::vector<ImVec4>* hot) {
       automation::StopAll();
       piano::Stop();
     }
-    // Remember where it was left.
     const ImVec2 pos = window->Pos;
     const double fx = pos.x / screen.x, fy = pos.y / screen.y;
     if (std::fabs(fx - cfg.tools_x) > 0.001 || std::fabs(fy - cfg.tools_y) > 0.001) {
@@ -1715,7 +1669,6 @@ void DrawStatusBadge(const Config& cfg) {
   const automation::Status st = automation::GetStatus();
   const piano::Status song = st.clicking || st.recording || st.playing ? piano::Status{} : piano::GetStatus();
   if (!st.clicking && !st.recording && !st.playing && !song.playing) return;
-  // A pill centred in the top-bar row: what runs, how far, and its hotkey.
   enum { kDot, kRing, kPlay } mark = kDot;
   ImU32 dot = Accent();
   std::string title, detail, key;

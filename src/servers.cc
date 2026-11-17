@@ -48,10 +48,7 @@ bool Fetch(const std::string& url, std::string* body) {
          !body->empty();
 }
 
-// Joins a server: the running Nightcap leaves the current game and joins
-// it. Straight through Nightcap's launch broker; with an older Nightcap,
-// by starting Nightcap again with the link, which hands it to this (single)
-// instance the same way.
+// Joins via Nightcap's launch broker, or by relaunching with the link.
 bool Join(const std::string& place, const std::string& job) {
   std::string error;
   if (nightcap::QueueJoin(place, job, &error)) {

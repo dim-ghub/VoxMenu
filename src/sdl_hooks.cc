@@ -1,19 +1,5 @@
-// SDL3 wrappers. This library is LD_PRELOADed into Nightcap, so these
-// definitions come before libSDL3's. Each one calls the real SDL function and
-// adds a little on top:
-//
-//   * Text input: track the focused Roblox text box to know what you sent,
-//     from the physical keyboard here and the VR keyboard (vr_keyboard.cc).
-//   * Events: open/close the menu (F8 or the top-bar button) and, while it
-//     is open, give mouse and keyboard to the menu instead of the game.
-//     While it is closed, the floating automation window and click-point
-//     markers still take the mouse where they are drawn.
-//   * Automation: hotkeys, recording macros, and the clicks and keys the
-//     autoclicker and macros inject (automation.cc).
-//   * Mouse mode: while the menu is open, keep the cursor free and visible
-//     even if Nightcap asks for first-person mouse lock; restore it after.
-//   * Audio: remember which streams are microphones and mix speech into
-//     what Nightcap reads from them.
+// SDL3 wrappers (LD_PRELOADed): chat tracking, menu input routing, automation
+// hotkeys and injection, mouse-lock override, and mixing speech into the mic.
 
 #include <SDL3/SDL.h>
 
@@ -96,7 +82,6 @@ void InjectKeyEvent(SDL_EventType type, SDL_Keycode key, SDL_Scancode scancode,
   g_injected_events.push_back(ev);
 }
 
-// The last real mouse device, for injected mouse events.
 SDL_MouseID g_mouse_id = 0;
 SDL_MouseButtonFlags g_injected_buttons = 0;
 
@@ -108,22 +93,19 @@ void InjectKeyPress(SDL_Keycode key, SDL_Scancode scancode, SDL_Keymod mod, SDL_
 void QueueClearAndCloseChat(SDL_WindowID win, size_t char_count) {
   std::lock_guard<std::mutex> lock(g_injected_mutex);
 
-  // 1. Select all text with Ctrl+A
+  // Ctrl+A, Backspace (plus extras in case Ctrl+A is ignored), Escape.
   InjectKeyEvent(SDL_EVENT_KEY_DOWN, SDLK_LCTRL, SDL_SCANCODE_LCTRL, SDL_KMOD_LCTRL, win);
   InjectKeyEvent(SDL_EVENT_KEY_DOWN, SDLK_A, SDL_SCANCODE_A, SDL_KMOD_LCTRL, win);
   InjectKeyEvent(SDL_EVENT_KEY_UP, SDLK_A, SDL_SCANCODE_A, SDL_KMOD_LCTRL, win);
   InjectKeyEvent(SDL_EVENT_KEY_UP, SDLK_LCTRL, SDL_SCANCODE_LCTRL, 0, win);
 
-  // 2. Delete selected text with Backspace
   InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
 
-  // 3. Extra backspaces to ensure all characters are erased even if Ctrl+A is unhandled
   const size_t extra = ClearPresses(char_count);
   for (size_t i = 0; i < extra; ++i) {
     InjectKeyPress(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE, 0, win);
   }
 
-  // 4. Close the chatbox by sending Escape
   InjectKeyPress(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0, win);
 }
 
@@ -395,7 +377,6 @@ bool Filter(SDL_Event& e) {
                      : e.button.button == SDL_BUTTON_RIGHT  ? 1
                      : e.button.button == SDL_BUTTON_MIDDLE ? 2
                                                             : -1;
-  // What the player presses, for the keystrokes HUD.
   if (is_key) overlay::NoteKey(e.key.scancode, e.type == SDL_EVENT_KEY_DOWN);
   if (button >= 0) overlay::NoteButton(button, e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
   if (e.type == SDL_EVENT_MOUSE_MOTION) g_mouse_id = e.motion.which;
@@ -445,7 +426,6 @@ bool Filter(SDL_Event& e) {
     return false;
   }
 
-  // Menu open: it gets the mouse and keyboard.
   overlay::Input in;
   switch (e.type) {
     case SDL_EVENT_KEY_DOWN:
@@ -701,9 +681,8 @@ EXPORT int SDL_PeepEvents(SDL_Event* events, int numevents, SDL_EventAction acti
                           Uint32 min_type, Uint32 max_type) {
   static int (*fn)(SDL_Event*, int, SDL_EventAction, Uint32, Uint32);
   if (action == SDL_GETEVENT && events != nullptr && numevents > 0) {
-    // Nightcap reads its events this way, once per frame (SDL_PumpEvents,
-    // then SDL_PeepEvents until empty): tick here even when nothing came in,
-    // or the autoclicker and macros stall while the mouse is still.
+    // Nightcap polls via PumpEvents + PeepEvents; tick here so automation
+    // doesn't stall when no events arrive.
     MainThreadTick();
     int injected_count = 0;
     while (injected_count < numevents) {

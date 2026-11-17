@@ -1,10 +1,5 @@
-// The autoclicker and macros: recorded or hand-written sequences of key
-// presses, clicks, mouse moves, waits and typed text, played back into the
-// game. Everything is injected through Nightcap's own event queue
-// (inject.h), so it only ever reaches the Roblox window.
-//
-// The UI asks for things from the render thread; the work happens on the
-// main thread in Tick(), once per event poll.
+// Autoclicker and macros. The UI requests from the render thread; work
+// happens on the main thread in Tick().
 
 #ifndef VOX_MENU_AUTOMATION_H_
 #define VOX_MENU_AUTOMATION_H_

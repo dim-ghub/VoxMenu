@@ -1,113 +1,41 @@
-# Development & Testing Guide
+# Development
 
-This guide covers building Vox Menu from source, running the automated test suite, inspecting mock drivers, and debugging the runtime.
+## Build and test
 
----
-
-## 1. Prerequisites
-
-To build Vox Menu, the following tools and development headers are required:
-
-- **Compiler**: C++17 compliant compiler (`g++` or `clang++`).
-- **Build System**: GNU `make`.
-- **SDL3**: Development library headers (`sdl3` or `libsdl3-dev`).
-- **Vulkan**: Headers and loader (`vulkan-headers`, `vulkan-icd-loader`).
-- **Python 3**: For running the test suite.
-- **TTS Backends (Optional for testing synthesis)**:
-  - `espeak-ng`
-  - `piper` or `piper-tts`
-
-On Arch Linux / Artix Linux:
-```bash
-sudo pacman -S base-devel sdl3 vulkan-headers vulkan-icd-loader espeak-ng
-```
-
----
-
-## 2. Building
-
-Build the shared library and helper tools:
+On Arch / Artix:
 
 ```bash
-make build
-```
-
-Artifacts generated in `build/`:
-- `libvox_tts.so`: The core shared library (SDL hooks + Vulkan layer).
-- `libvox_tts.so`, `libnightcap_ac.so`: symlinks to `libvox_menu.so` under the older names.
-- `vox-menu-render`: Standalone CLI tool to render Animalese directly to a WAV file.
-
----
-
-## 3. Running Tests
-
-The test suite runs integration and unit tests without needing an active Roblox or Nightcap session:
-
-```bash
+sudo pacman -S base-devel sdl3 vulkan-headers vulkan-icd-loader openxr espeak-ng
+make build   # build/libvox_menu.so (plus legacy-name symlinks) and build/vox-menu-render
 make test
 ```
 
-### Test Drivers
-The test framework includes dedicated C++ stand-ins to exercise the hooks and overlay:
+Tests run without Roblox or Nightcap, using stand-ins:
 
-1. **`build/vk_driver` (`tests/vk_driver.cc`)**:
-   - Spawns a headless Vulkan window with swapchain.
-   - Loads `libvox_menu.so` as a Vulkan layer.
-   - Feeds scripted mouse and keyboard inputs frame-by-frame (`key`, `click`, `move`, `text`, and
-     `press` / `release` for drags).
-   - Dumps framebuffer images (`.ppm`) to verify pixel-accurate menu rendering, hover states, and animations.
-
-2. **`build/mic_driver` (`tests/mic_driver.cc`)**:
-   - Opens an SDL3 microphone capture stream.
-   - Simulates hardware microphone samples and calls `MixIntoMic()`.
-   - Captures output PCM data to verify audio blending, volume scaling, and muting behaviors.
-
-3. **`build/chat_test` (`tests/chat_test.cc`)**:
-   - Unit tests the `ChatTracker` class (`src/chat.cc`) against complex typing sequences, Unicode strings, backspaces, text selections, and multiline pastes.
-
-4. **`build/automation_test` (`tests/automation_test.cc`)**:
-   - Unit tests the autoclicker and macro engine with input injection replaced by a log: click
-     timing and limits, fixed points, hold mode, hotkeys, playback, looping, recording, and the
-     macro file format.
-   - Server tracking from Roblox's log lines, the packet-timing ping estimator, server-hop
-     picking, and joining through a stand-in for Nightcap's launch broker (a real
-     `MOCKTAIL-EXTERNAL-LAUNCH/1` socket).
-
-5. **`build/piano_test` (`tests/piano_test.cc`)**:
-   - Unit tests the MIDI piano: file parsing (tempo, running status, note-on velocity 0, drum
-     tracks), the 61 / 88-key layout, the songs folder, playback order and modifiers, transpose,
-     pausing, seeking, speed and the control-socket commands, with input injection replaced by a log.
-
-6. **`build/xr_driver` (`tests/xr_driver.cc`)**:
-   - Stands in for Nightcap's VR path: Vulkan made through the runtime, a session with the Vulkan
-     binding, its own action set, and frames. `test_xr.py` runs it against Monado started headless
-     (`XRT_COMPOSITOR_NULL=1`, a simulated headset, in a private runtime directory) and checks the
-     panel and stats it renders. Skipped where Monado isn't installed. Monado's simulated
-     controllers can't be pressed, so controller input is only covered by the unit tests of the
-     panel geometry and bindings.
-
-7. **Python Test Suites (`tests/`)**:
-   - `test_inprocess.py`: Tests Vulkan overlay rendering, tab switching, keyboard selection, config migration, audio capture, the HUD overlays, the floating window's input routing, the autoclicker hotkey, layout-editor snapping, the FPS cap, and a song played through the piano's control socket.
-   - `test_launcher.py`: Tests the shell launcher, lock detection, and desktop patching.
-   - `test_synth.py`: Tests the audio synthesizer math, pitch autocorrelation, RMS power, and duration scaling across styles.
-
----
-
-## 4. Debugging & Environment Flags
-
-Vox Menu provides several environment variables for diagnostic output and inspection:
-
-| Environment Variable | Description |
+| Driver | Stands in for |
 | --- | --- |
-| `VOX_MENU_MENU_OPEN=1` | Starts the Vulkan layer with the overlay menu immediately open on the first frame. |
-| `VOX_MENU_SHOW_BUTTON=1` | Forces the top-bar overlay button to render even outside of an active game. |
-| `VOX_MENU_DUMP=/path/to/frame.ppm` | Dumps the composited Vulkan frame buffer to a PPM image file. |
-| `VOX_MENU_DUMP_FRAME=N` | Specifies the frame number to dump (default: frame 30, allowing fonts and layouts to settle). |
-| `VOX_MENU_LIB=/path/to/libvox_menu.so` | Overrides the library path searched by the launcher script. |
+| `tests/vk_driver.cc` | Nightcap's window and Vulkan presents; scripted input, frame dumps |
+| `tests/mic_driver.cc` | Nightcap's mic stream and chat box (and its VR keyboard) |
+| `tests/xr_driver.cc` | Nightcap's OpenXR path; run against headless Monado, skipped if absent |
 
-| `VOX_MENU_VR_OPEN=1` | Opens the headset panel on the first VR frame. |
-| `VOX_MENU_VR_DUMP=/path/to/panel.ppm` | Saves the headset panel's texture (the `VOX_MENU_VR_DUMP_FRAME`-th rendered, default 10th), transparent parts over dark grey. |
-| `VOX_MENU_VR_CLICKS="x,y,down,up;..."` | Scripted pointing on the headset panel (texture pixels): the trigger is held from frame `down` to `up`. For tests, where simulated controllers can't be pressed. |
-| `DISABLE_VOX_MENU_XR_LAYER=1` | Turns the OpenXR (headset) layer off. |
+Unit tests: `chat_test.cc`, `automation_test.cc` (also server tracking, ping, hop, launch broker),
+`piano_test.cc`. Python suites: `test_inprocess.py` (overlay, input, HUD, FPS cap, piano socket),
+`test_launcher.py`, `test_synth.py`, `test_xr.py`.
 
-The older `VOX_TTS_*` and `NIGHTCAP_AC_*` names still work. `DISABLE_VOX_MENU_LAYER=1` turns the overlay layer off.
+`build/vox-menu-render` renders Animalese to a WAV file.
+
+## Environment variables
+
+The `VOX_TTS_` and `NIGHTCAP_AC_` prefixes also work.
+
+| Variable | Effect |
+| --- | --- |
+| `VOX_MENU_MENU_OPEN=1` | Start with the menu open |
+| `VOX_MENU_SHOW_BUTTON=1` | Show the top-bar button outside a game |
+| `VOX_MENU_DUMP=path.ppm` | Save a composited frame (`VOX_MENU_DUMP_FRAME`, default 30) |
+| `VOX_MENU_VR_OPEN=1` | Open the headset panel on the first VR frame |
+| `VOX_MENU_VR_DUMP=path.ppm` | Save the headset panel texture (`VOX_MENU_VR_DUMP_FRAME`, default 10) |
+| `VOX_MENU_VR_CLICKS="x,y,down,up;..."` | Scripted trigger presses on the panel, in texture pixels |
+| `VOX_MENU_LIB=path` | Library the launcher loads |
+| `DISABLE_VOX_MENU_LAYER=1` | Disable the Vulkan layer |
+| `DISABLE_VOX_MENU_XR_LAYER=1` | Disable the OpenXR layer |

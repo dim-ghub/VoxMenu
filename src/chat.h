@@ -1,8 +1,5 @@
-// Rebuilds what is in the focused Roblox text box from its keystrokes.
-//
-// Roblox closes the chat bar after Enter, so a message is the box's contents
-// at the moment Enter is pressed. Escape or losing focus throws the draft
-// away, as in-game. Password boxes are never tracked.
+// Rebuilds the focused Roblox text box from keystrokes; the contents at
+// Enter is the sent message.
 
 #ifndef VOX_MENU_CHAT_H_
 #define VOX_MENU_CHAT_H_

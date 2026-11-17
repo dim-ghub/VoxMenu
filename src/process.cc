@@ -34,10 +34,8 @@ std::vector<char*> Pointers(std::vector<std::string>& strings) {
   return out;
 }
 
-// Runs a program and returns its exit status (-1 when it couldn't start),
-// with its standard output in *out when given.
-// Runs argv; with `started`, returns right away (pid in *started, its
-// output readable from *stdout_fd), else waits and collects it into *out.
+// Runs argv. With `started`, returns at once (pid in *started, output on
+// *stdout_fd); otherwise waits, collecting output into *out.
 int RunImpl(std::vector<std::string> argv, std::string* out, pid_t* started, int* stdout_fd) {
   const bool piped = out != nullptr || stdout_fd != nullptr;
   int fds[2] = {-1, -1};

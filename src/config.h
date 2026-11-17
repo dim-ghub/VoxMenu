@@ -1,5 +1,4 @@
-// Settings for Vox Menu, stored in $XDG_CONFIG_HOME/vox-menu/config.json
-// (migrated from the older vox-tts/ and nightcap-ac/ locations).
+// Settings, stored in $XDG_CONFIG_HOME/vox-menu/config.json.
 
 #ifndef VOX_MENU_CONFIG_H_
 #define VOX_MENU_CONFIG_H_
@@ -8,10 +7,7 @@
 
 namespace nac {
 
-// One movable, resizable HUD overlay. x and y are where it sits across the
-// room the screen leaves it: 0 against the left / top edge, 1 against the
-// right / bottom, 0.5 centred. Widgets stay lined up with the edge they are
-// near as their text changes width, and layouts survive resolution changes.
+// x, y: 0..1 across the free space (0 = left/top edge).
 struct HudWidget {
   bool on = false;
   double x = 0.5, y = 0.5;

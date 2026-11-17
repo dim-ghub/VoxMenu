@@ -1,8 +1,4 @@
-// Rejoining the last server and hopping to another one of the same game,
-// from inside the game. Nightcap's launch broker (nightcap.h) makes the
-// running game leave and join the new server in place. The server list for
-// hopping comes from Roblox's public games API, fetched with curl (or
-// Python) in the background.
+// Rejoin and server hop.
 
 #ifndef VOX_MENU_SERVERS_H_
 #define VOX_MENU_SERVERS_H_

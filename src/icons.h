@@ -1,9 +1,5 @@
-// Roblox's own icon font, BuilderIcons, looked up by glyph name.
-//
-// The font ships inside the Roblox client Nightcap downloads
-// (LuaPackages/.../BuilderIcons/Font/BuilderIcons-Regular.ttf). Its private
-// codepoints may shift between Roblox versions, so icons are found by name
-// ("gear", "chevron-large-left", ...) from the font's own tables.
+// BuilderIcons glyphs looked up by name, since codepoints shift between
+// Roblox versions.
 
 #ifndef VOX_MENU_ICONS_H_
 #define VOX_MENU_ICONS_H_

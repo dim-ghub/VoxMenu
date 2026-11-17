@@ -1,7 +1,4 @@
-// Drawing the headset panel (ui::DrawVr) into the images of an OpenXR
-// swapchain, on the Vulkan device the OpenXR session uses. That is the
-// game's own device, which the Vulkan layer (layer.cc) already follows, so
-// the same ImGui renderer works there.
+// Draws the headset panel into OpenXR swapchain images on the game's device.
 
 #ifndef VOX_MENU_XR_RENDER_H_
 #define VOX_MENU_XR_RENDER_H_

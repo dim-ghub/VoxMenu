@@ -1,6 +1,4 @@
-// Finding data objects in Nightcap's own executable by symbol name, from
-// the static symbol table in /proc/self/exe. Nightcap ships unstripped; on a
-// stripped build nothing matches and callers fall back.
+// Finds data objects in /proc/self/exe by symbol name (none on stripped builds).
 
 #ifndef VOX_MENU_EXE_SYMBOLS_H_
 #define VOX_MENU_EXE_SYMBOLS_H_

@@ -1,7 +1,4 @@
-// A frame-rate cap, applied where each frame is presented (ported from
-// Cocktail's fpslimit layer). It reads the cap from the settings, so changes
-// apply right away; a separate cap can apply while Roblox isn't focused.
-// It is off while the game is shown in a VR headset.
+// Frame-rate cap applied at present (from Cocktail's fpslimit). Off in VR.
 
 #ifndef VOX_MENU_FRAMECAP_H_
 #define VOX_MENU_FRAMECAP_H_
